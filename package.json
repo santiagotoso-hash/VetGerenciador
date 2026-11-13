@@ -1,0 +1,22 @@
+{
+  "name": "vetpet-manager",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "back",
+    "front"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev -w api\" \"npm run dev -w web\"",
+    "build": "npm run build -w api && npm run build -w web",
+    "start": "concurrently \"npm run start:prod -w api\" \"npm run start -w web\"",
+    "lint": "npm run lint --workspaces --if-present",
+    "db:generate": "npm run prisma:generate -w api",
+    "db:migrate": "npm run prisma:migrate -w api",
+    "db:studio": "npm run prisma:studio -w api",
+    "db:seed": "npm run prisma:seed -w api"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

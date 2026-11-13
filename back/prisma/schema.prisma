@@ -1,0 +1,273 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  ADMIN
+  VETERINARIAN
+  RECEPTIONIST
+  GROOMER
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum AppointmentType {
+  CONSULTATION
+  VACCINATION
+  EXAM
+  SURGERY
+  GROOMING
+  BATH
+  RETURN
+}
+
+enum Species {
+  DOG
+  CAT
+  BIRD
+  RABBIT
+  HAMSTER
+  FISH
+  REPTILE
+  OTHER
+}
+
+enum PaymentMethod {
+  CASH
+  CREDIT_CARD
+  DEBIT_CARD
+  PIX
+  BANK_TRANSFER
+  CHECK
+}
+
+enum FinancialType {
+  INCOME
+  EXPENSE
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  password     String
+  role         Role     @default(RECEPTIONIST)
+  phone        String?
+  active       Boolean  @default(true)
+  refreshToken String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  appointments          Appointment[]
+  scheduledAppointments Appointment[]   @relation("ScheduledBy")
+  medicalRecords        MedicalRecord[]
+  sales                 Sale[]
+
+  @@map("users")
+}
+
+model Client {
+  id        String   @id @default(cuid())
+  name      String
+  cpf       String?  @unique
+  phone     String
+  email     String?
+  address   String?
+  city      String?
+  state     String?
+  zipCode   String?
+  notes     String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pets  Pet[]
+  sales Sale[]
+
+  @@map("clients")
+}
+
+model Pet {
+  id                String    @id @default(cuid())
+  name              String
+  species           Species
+  breed             String?
+  color             String?
+  birthDate         DateTime?
+  weight            Float?
+  microchip         String?
+  photo             String?
+  birthdayEmail     Boolean   @default(false)
+  birthdayEmailYear Int?
+  allergies         String?
+  observations      String?
+  active            Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+
+  appointments   Appointment[]
+  medicalRecords MedicalRecord[]
+
+  @@map("pets")
+}
+
+model Service {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  category    String
+  price       Float
+  duration    Int
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  appointments Appointment[]
+  saleItems    SaleItem[]
+
+  @@map("services")
+}
+
+model Appointment {
+  id                 String            @id @default(cuid())
+  date               DateTime
+  status             AppointmentStatus @default(SCHEDULED)
+  type               AppointmentType
+  notes              String?
+  observations       String?
+  price              Float?
+  notifyClient       Boolean           @default(false)
+  confirmationSentAt DateTime?
+  reminderSentAt     DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  petId          String
+  pet            Pet      @relation(fields: [petId], references: [id])
+  veterinarianId String?
+  veterinarian   User?    @relation(fields: [veterinarianId], references: [id])
+  scheduledById  String?
+  scheduledBy    User?    @relation("ScheduledBy", fields: [scheduledById], references: [id])
+  serviceId      String?
+  service        Service? @relation(fields: [serviceId], references: [id])
+
+  medicalRecord MedicalRecord?
+
+  @@map("appointments")
+}
+
+model MedicalRecord {
+  id           String   @id @default(cuid())
+  date         DateTime @default(now())
+  anamnesis    String?
+  diagnosis    String?
+  treatment    String?
+  prescription String?
+  exams        String?
+  weight       Float?
+  temperature  Float?
+  heartRate    Int?
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  petId          String
+  pet            Pet          @relation(fields: [petId], references: [id])
+  veterinarianId String
+  veterinarian   User         @relation(fields: [veterinarianId], references: [id])
+  appointmentId  String?      @unique
+  appointment    Appointment? @relation(fields: [appointmentId], references: [id])
+
+  @@map("medical_records")
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  category    String
+  brand       String?
+  sku         String?  @unique
+  barcode     String?  @unique
+  price       Float
+  costPrice   Float?
+  stock       Int      @default(0)
+  minStock    Int      @default(5)
+  unit        String   @default("un")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  saleItems SaleItem[]
+
+  @@map("products")
+}
+
+model Sale {
+  id            String        @id @default(cuid())
+  date          DateTime      @default(now())
+  total         Float
+  discount      Float         @default(0)
+  paymentMethod PaymentMethod
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  clientId String?
+  client   Client? @relation(fields: [clientId], references: [id])
+  userId   String
+  user     User    @relation(fields: [userId], references: [id])
+
+  items SaleItem[]
+
+  @@map("sales")
+}
+
+model SaleItem {
+  id        String @id @default(cuid())
+  quantity  Int
+  unitPrice Float
+  total     Float
+  discount  Float  @default(0)
+
+  saleId    String
+  sale      Sale     @relation(fields: [saleId], references: [id])
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+  serviceId String?
+  service   Service? @relation(fields: [serviceId], references: [id])
+
+  @@map("sale_items")
+}
+
+model FinancialEntry {
+  id            String         @id @default(cuid())
+  type          FinancialType
+  description   String
+  amount        Float
+  date          DateTime
+  category      String
+  paymentMethod PaymentMethod?
+  paid          Boolean        @default(false)
+  notes         String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@map("financial_entries")
+}
