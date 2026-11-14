@@ -37,16 +37,21 @@ export class AppointmentNotifier implements OnModuleInit, OnModuleDestroy {
     if (this.timer) clearInterval(this.timer);
   }
 
-  private body(a: any, intro: string) {
-    const when = new Date(a.date).toLocaleString('pt-BR', {
+  private when(d: Date | string) {
+    return new Date(d).toLocaleString('pt-BR', {
       dateStyle: 'full',
       timeStyle: 'short',
       timeZone: process.env.TZ || 'America/Sao_Paulo',
     });
+  }
+
+  private body(a: any, intro: string, changes: string[] = []) {
+    const when = this.when(a.date);
     return `<div style="font-family:Arial,sans-serif;max-width:520px">
       <h2 style="color:#0d9488">🐾 VetPet</h2>
       <p>Olá, ${esc(a.pet.client.name)}!</p>
       <p>${intro}</p>
+      ${changes.length ? `<ul style="color:#b45309">${changes.map((c) => `<li>${c}</li>`).join('')}</ul>` : ''}
       <table style="border-collapse:collapse">
         <tr><td style="padding:4px 12px 4px 0;color:#666">Pet</td><td><b>${esc(a.pet.name)}</b></td></tr>
         <tr><td style="padding:4px 12px 4px 0;color:#666">Atendimento</td><td>${typeLabel[a.type] ?? a.type}${a.service ? ` — ${esc(a.service.name)}` : ''}</td></tr>
@@ -71,6 +76,34 @@ export class AppointmentNotifier implements OnModuleInit, OnModuleDestroy {
     if (!a || !a.notifyClient || !to) return;
     const ok = await this.mail.send(to, 'Agendamento confirmado', this.body(a, 'Seu agendamento foi registrado:'));
     if (ok) await this.prisma.appointment.update({ where: { id }, data: { confirmationSentAt: new Date() } });
+  }
+
+  private label(a: any) {
+    return `${typeLabel[a.type] ?? a.type}${a.service ? ` — ${a.service.name}` : ''}`;
+  }
+
+  /** E-mail com o que mudou, quando o agendamento é editado. Recebe o estado antes e depois. */
+  async sendChange(before: any, after: any) {
+    const to = after.pet.client.email;
+    if (!after.notifyClient || !to) return;
+    const changes: string[] = [];
+    if (new Date(before.date).getTime() !== new Date(after.date).getTime())
+      changes.push(`<b>Data e hora:</b> de ${this.when(before.date)} para <b>${this.when(after.date)}</b>`);
+    if (this.label(before) !== this.label(after))
+      changes.push(`<b>Atendimento:</b> de ${esc(this.label(before))} para <b>${esc(this.label(after))}</b>`);
+    if (before.petId !== after.petId)
+      changes.push(`<b>Pet:</b> de ${esc(before.pet.name)} para <b>${esc(after.pet.name)}</b>`);
+    if ((before.veterinarian?.id ?? null) !== (after.veterinarian?.id ?? null))
+      changes.push(`<b>Profissional:</b> de ${esc(before.veterinarian?.name ?? '—')} para <b>${esc(after.veterinarian?.name ?? '—')}</b>`);
+    if (!changes.length) return;
+    await this.mail.send(to, 'Seu agendamento foi alterado', this.body(after, 'Houve uma alteração no seu agendamento:', changes));
+  }
+
+  /** E-mail de cancelamento. Recebe o agendamento já carregado (serve também antes de excluir). */
+  async sendCancellation(a: any) {
+    const to = a.pet.client.email;
+    if (!a.notifyClient || !to) return;
+    await this.mail.send(to, 'Agendamento cancelado', this.body(a, 'Seu agendamento foi <b>cancelado</b>:'));
   }
 
   /** Parabéns no dia do aniversário (fuso de São Paulo) para pets com a opção ativada. */

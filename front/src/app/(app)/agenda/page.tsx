@@ -43,6 +43,7 @@ export default function AgendaPage() {
     return new Date(d.getFullYear(), d.getMonth(), 1);
   });
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Appointment | null>(null);
   const [apiError, setApiError] = useState('');
 
   // 42 células (6 semanas) começando no domingo anterior ao dia 1
@@ -100,20 +101,38 @@ export default function AgendaPage() {
 
   const openNew = (key = selected) => {
     setApiError('');
+    setEditing(null);
     const d = parseDay(key);
     d.setHours(9, 0);
     form.reset({ petId: '', type: 'CONSULTATION', date: toLocalInput(d), scheduledById: '', serviceId: '', notes: '', notifyClient: false });
     setOpen(true);
   };
 
+  const openEdit = (a: Appointment) => {
+    setApiError('');
+    setEditing(a);
+    form.reset({
+      petId: a.petId,
+      type: a.type,
+      date: toLocalInput(new Date(a.date)),
+      scheduledById: a.scheduledBy?.id ?? '',
+      serviceId: a.serviceId ?? '',
+      notes: a.notes ?? '',
+      notifyClient: !!a.notifyClient,
+    });
+    setOpen(true);
+  };
+
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['appointments'] });
+    qc.invalidateQueries({ queryKey: ['pet'] });
+    qc.invalidateQueries({ queryKey: ['client'] });
     qc.invalidateQueries({ queryKey: ['dashboard'] });
   };
 
-  const create = useMutation({
-    mutationFn: async (f: Form) =>
-      api.post('/appointments', {
+  const save = useMutation({
+    mutationFn: async (f: Form) => {
+      const body = {
         petId: f.petId,
         type: f.type,
         date: new Date(f.date).toISOString(),
@@ -121,7 +140,11 @@ export default function AgendaPage() {
         ...(f.serviceId && { serviceId: f.serviceId }),
         ...(f.notes && { notes: f.notes }),
         notifyClient: f.notifyClient && !!clientEmail,
-      }),
+      };
+      return editing
+        ? api.patch(`/appointments/${editing.id}`, { ...body, serviceId: f.serviceId || undefined, notes: f.notes })
+        : api.post('/appointments', body);
+    },
     onSuccess: () => {
       refresh();
       setOpen(false);
@@ -133,6 +156,12 @@ export default function AgendaPage() {
     mutationFn: async ({ id, status }: { id: string; status: AppointmentStatus }) =>
       api.patch(`/appointments/${id}/status`, { status }),
     onSuccess: refresh,
+  });
+
+  const remove = useMutation({
+    mutationFn: async (id: string) => api.delete(`/appointments/${id}`),
+    onSuccess: refresh,
+    onError: (e) => alert(errorMessage(e)),
   });
 
   const goMonth = (offset: number) => {
@@ -246,6 +275,19 @@ export default function AgendaPage() {
                   <Link href={`/pets/${a.petId}?aba=prontuario`} className="text-sm text-gray-600 hover:underline">
                     📋 Prontuário
                   </Link>
+                  <div className="flex gap-3 text-sm">
+                    {a.status !== 'CANCELLED' && (
+                      <button className="text-gray-600 hover:underline" onClick={() => openEdit(a)}>Editar</button>
+                    )}
+                    <button
+                      className="text-red-600 hover:underline"
+                      onClick={() =>
+                        confirm(`Excluir este agendamento de ${a.pet?.name}? Esta ação não pode ser desfeita.`) && remove.mutate(a.id)
+                      }
+                    >
+                      Excluir
+                    </button>
+                  </div>
                   {!closed && (
                     <div className="flex gap-2 text-sm">
                       {next && (
@@ -268,8 +310,8 @@ export default function AgendaPage() {
         )}
       </Card>
 
-      <Modal open={open} onClose={() => setOpen(false)} title="Novo agendamento">
-        <form onSubmit={form.handleSubmit((f) => create.mutate(f))} className="space-y-3">
+      <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'Editar agendamento' : 'Novo agendamento'}>
+        <form onSubmit={form.handleSubmit((f) => save.mutate(f))} className="space-y-3">
           <ErrorBox message={apiError} />
           <Field label="Pet *" error={form.formState.errors.petId?.message}>
             <select className={inputCls} {...form.register('petId')}>
@@ -304,7 +346,9 @@ export default function AgendaPage() {
               <span className="block text-xs text-gray-500">
                 {selectedPet
                   ? clientEmail
-                    ? `Confirmação agora e lembrete 1 dia antes, para ${clientEmail}.`
+                    ? editing
+                      ? `Avisa as mudanças (e cancelamento) por e-mail para ${clientEmail}.`
+                      : `Confirmação agora e lembrete 1 dia antes, para ${clientEmail}.`
                     : 'Este cliente não tem e-mail cadastrado.'
                   : 'Confirmação agora e lembrete 1 dia antes. Selecione o pet primeiro.'}
               </span>
@@ -312,7 +356,7 @@ export default function AgendaPage() {
           </label>
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" className={btnGhost} onClick={() => setOpen(false)}>Cancelar</button>
-            <button type="submit" className={btnPrimary} disabled={create.isPending}>{create.isPending ? 'Salvando…' : 'Agendar'}</button>
+            <button type="submit" className={btnPrimary} disabled={save.isPending}>{save.isPending ? 'Salvando…' : editing ? 'Salvar alterações' : 'Agendar'}</button>
           </div>
         </form>
       </Modal>
