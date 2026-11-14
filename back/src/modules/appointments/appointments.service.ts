@@ -62,21 +62,44 @@ export class AppointmentsService {
   }
 
   async update(id: string, dto: UpdateAppointmentDto) {
-    await this.findOne(id);
+    const before = await this.findOne(id);
     const data: any = { ...dto };
     if (dto.date) {
       data.date = new Date(dto.date);
-      data.reminderSentAt = null; // nova data: lembrete deve ser reenviado
+      if (data.date.getTime() !== before.date.getTime()) data.reminderSentAt = null; // nova data: lembrete deve ser reenviado
     }
-    return this.prisma.appointment.update({ where: { id }, data, include });
+    if (dto.serviceId && dto.price === undefined && dto.serviceId !== before.serviceId) {
+      const svc = await this.prisma.service.findUnique({ where: { id: dto.serviceId } });
+      if (svc) data.price = svc.price;
+    }
+    const after = await this.prisma.appointment.update({ where: { id }, data, include });
+    // e-mail só se ainda estiver ativo; falha no envio não derruba a edição
+    if (after.status !== AppointmentStatus.CANCELLED) {
+      this.notifier.sendChange(before, after).catch(() => undefined);
+    }
+    return after;
   }
 
   async updateStatus(id: string, status: AppointmentStatus) {
-    await this.findOne(id);
-    return this.prisma.appointment.update({ where: { id }, data: { status }, include });
+    const before = await this.findOne(id);
+    const after = await this.prisma.appointment.update({ where: { id }, data: { status }, include });
+    if (status === AppointmentStatus.CANCELLED && before.status !== AppointmentStatus.CANCELLED) {
+      this.notifier.sendCancellation(after).catch(() => undefined);
+    }
+    return after;
   }
 
-  remove(id: string) {
-    return this.updateStatus(id, AppointmentStatus.CANCELLED);
+  /** Exclui de vez. Se ainda estava ativo, avisa o cliente do cancelamento antes. */
+  async remove(id: string) {
+    const a = await this.findOne(id);
+    if (a.status !== AppointmentStatus.CANCELLED && a.status !== AppointmentStatus.COMPLETED) {
+      this.notifier.sendCancellation(a).catch(() => undefined);
+    }
+    // o prontuário vinculado (se houver) é mantido, só desvinculado
+    await this.prisma.$transaction([
+      this.prisma.medicalRecord.updateMany({ where: { appointmentId: id }, data: { appointmentId: null } }),
+      this.prisma.appointment.delete({ where: { id } }),
+    ]);
+    return { id };
   }
 }

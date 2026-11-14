@@ -42,7 +42,11 @@ export class PetsService {
     await this.findOne(id);
     return this.prisma.appointment.findMany({
       where: { petId: id },
-      include: { service: true, veterinarian: true },
+      include: {
+        service: true,
+        veterinarian: { select: { id: true, name: true } },
+        scheduledBy: { select: { id: true, name: true } },
+      },
       orderBy: { date: 'desc' },
     });
   }
