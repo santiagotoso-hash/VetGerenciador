@@ -13,6 +13,8 @@ async function bootstrap() {
   app.use(json({ limit: '1mb' }));
   app.use(urlencoded({ extended: true, limit: '1mb' }));
 
+  app.setGlobalPrefix('api');
+
   app.enableCors({
     origin: configService.get('WEB_URL', 'http://localhost:3000'),
     credentials: true,
