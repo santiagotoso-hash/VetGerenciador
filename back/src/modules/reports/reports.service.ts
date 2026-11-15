@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { currentCompanyId } from '../../common/tenant';
 
 @Injectable()
 export class ReportsService {
@@ -64,7 +65,7 @@ export class ReportsService {
   /** Produtos e serviços mais vendidos no período (top 5 de cada). */
   async topItems(from: string, to: string) {
     const items = await this.prisma.saleItem.findMany({
-      where: { sale: { date: { gte: new Date(from), lte: new Date(to) } } },
+      where: { sale: { companyId: currentCompanyId(), date: { gte: new Date(from), lte: new Date(to) } } },
       include: { product: true, service: true },
     });
 

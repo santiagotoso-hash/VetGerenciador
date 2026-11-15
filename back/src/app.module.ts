@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { TenantInterceptor } from './common/tenant';
+import { CompaniesModule } from './modules/companies/companies.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { MailModule } from './modules/mail/mail.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -32,6 +35,8 @@ import { ReportsModule } from './modules/reports/reports.module';
     SalesModule,
     FinancialModule,
     ReportsModule,
+    CompaniesModule,
   ],
+  providers: [{ provide: APP_INTERCEPTOR, useClass: TenantInterceptor }],
 })
 export class AppModule {}

@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { currentCompanyId } from '../../common/tenant';
 import { AppointmentNotifier } from './appointment-notifier';
+import { assertExists } from '../../common/tenant-refs';
 import { AppointmentStatus, CreateAppointmentDto, UpdateAppointmentDto } from './dto';
 
 const include = {
@@ -8,7 +10,9 @@ const include = {
   veterinarian: { select: { id: true, name: true } },
   scheduledBy: { select: { id: true, name: true } },
   service: true,
+  company: { select: { name: true } },
 };
+
 
 @Injectable()
 export class AppointmentsService {
@@ -17,14 +21,22 @@ export class AppointmentsService {
     private notifier: AppointmentNotifier,
   ) {}
 
+  private async checkRefs(dto: Partial<CreateAppointmentDto>) {
+    if (dto.petId) await assertExists(this.prisma.pet.findUnique({ where: { id: dto.petId } }), 'Pet');
+    if (dto.serviceId) await assertExists(this.prisma.service.findUnique({ where: { id: dto.serviceId } }), 'Serviço');
+    if (dto.veterinarianId) await assertExists(this.prisma.user.findUnique({ where: { id: dto.veterinarianId } }), 'Veterinário');
+    if (dto.scheduledById) await assertExists(this.prisma.user.findUnique({ where: { id: dto.scheduledById } }), 'Atendente');
+  }
+
   async create(dto: CreateAppointmentDto) {
+    await this.checkRefs(dto);
     let price = dto.price;
     if (price === undefined && dto.serviceId) {
       const svc = await this.prisma.service.findUnique({ where: { id: dto.serviceId } });
       price = svc?.price;
     }
     const created = await this.prisma.appointment.create({
-      data: { ...dto, price, date: new Date(dto.date) },
+      data: { ...dto, price, date: new Date(dto.date), companyId: currentCompanyId() },
       include,
     });
     if (created.notifyClient) {
@@ -63,6 +75,7 @@ export class AppointmentsService {
 
   async update(id: string, dto: UpdateAppointmentDto) {
     const before = await this.findOne(id);
+    await this.checkRefs(dto);
     const data: any = { ...dto };
     if (dto.date) {
       data.date = new Date(dto.date);

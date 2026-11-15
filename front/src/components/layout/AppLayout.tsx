@@ -5,7 +5,8 @@ import { useState } from 'react';
 import { useAuthStore } from '@/store/auth.store';
 import { useRouter } from 'next/navigation';
 
-const navItems: { href: string; label: string; icon: string; adminOnly?: boolean }[] = [
+const navItems: { href: string; label: string; icon: string; adminOnly?: boolean; superOnly?: boolean }[] = [
+  { href: '/empresas', label: 'Empresas', icon: '🏢', superOnly: true },
   { href: '/dashboard', label: 'Dashboard', icon: '🏠' },
   { href: '/clientes', label: 'Clientes', icon: '👥' },
   { href: '/pets', label: 'Pets', icon: '🐾' },
@@ -44,11 +45,18 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         } lg:relative lg:translate-x-0 lg:flex lg:flex-col`}
       >
-        <div className="flex items-center justify-center h-16 px-4 bg-primary-600">
-          <h1 className="text-white text-xl font-bold">🐾 VetPet</h1>
-        </div>
+        {user?.company?.logo ? (
+          <div className="flex items-center justify-center border-b border-gray-100 bg-white py-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={user.company.logo} alt={user.company.name} className="h-28 w-28 rounded-2xl object-cover" />
+          </div>
+        ) : (
+          <div className="flex items-center justify-center h-16 px-4 bg-primary-600">
+            <h1 className="truncate text-white text-xl font-bold">🐾 {user?.company?.name ?? 'VetPet'}</h1>
+          </div>
+        )}
         <nav className="mt-4 px-2 flex-1 overflow-y-auto">
-          {navItems.filter((item) => !item.adminOnly || user?.role === 'ADMIN').map((item) => (
+          {navItems.filter((item) => (user?.role === 'SUPER_ADMIN' ? item.superOnly : !item.superOnly && (!item.adminOnly || user?.role === 'ADMIN'))).map((item) => (
             <Link
               key={item.href}
               href={item.href}
@@ -65,7 +73,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
         <div className="p-4 border-t border-gray-100 text-xs text-gray-400 text-center">
-          VetPet Manager v1.0
+          {user?.company?.name ? `${user.company.name} · VetPet Manager` : 'VetPet Manager v1.0'}
         </div>
       </aside>
 

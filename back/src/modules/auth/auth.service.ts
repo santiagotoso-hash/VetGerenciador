@@ -15,14 +15,17 @@ export class AuthService {
   async validateUser(email: string, password: string): Promise<any> {
     const user = await this.usersService.findByEmail(email);
     if (user && user.active && (await bcrypt.compare(password, user.password))) {
-      const { password: _pw, ...result } = user;
+      if (user.companyId && user.company && !user.company.active) {
+        throw new UnauthorizedException('Empresa desativada. Entre em contato com o suporte.');
+      }
+      const { password: _pw, refreshToken: _rt, ...result } = user;
       return result;
     }
     return null;
   }
 
   async login(user: any) {
-    const payload = { email: user.email, sub: user.id, role: user.role };
+    const payload = { email: user.email, sub: user.id, role: user.role, companyId: user.companyId ?? null };
     const accessToken = this.jwtService.sign(payload);
     const refreshToken = this.jwtService.sign(payload, {
       secret: this.configService.get('JWT_REFRESH_SECRET'),

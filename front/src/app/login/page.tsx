@@ -8,6 +8,8 @@ import { api, errorMessage } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import type { AuthResponse } from '@/types';
 import { ErrorBox, Field, btnPrimary, inputCls } from '@/components/ui';
+import { whatsappUrl } from '@/lib/format';
+import { LITOCODE_WHATSAPP } from '@/lib/brand';
 
 const schema = z.object({
   email: z.string().email('E-mail inválido'),
@@ -30,14 +32,14 @@ export default function LoginPage() {
     try {
       const res = await api.post<AuthResponse>('/auth/login', data);
       setAuth(res.data.user, res.data.accessToken);
-      router.push('/dashboard');
+      router.push(res.data.user.role === 'SUPER_ADMIN' ? '/empresas' : '/dashboard');
     } catch (e) {
       setError((e as any)?.response?.status === 401 ? 'E-mail ou senha incorretos' : errorMessage(e));
     }
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary-50 to-white p-4">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-gradient-to-br from-primary-50 to-white p-4">
       <form
         onSubmit={handleSubmit(onSubmit)}
         className="w-full max-w-sm space-y-4 rounded-2xl bg-white p-8 shadow-lg"
@@ -58,6 +60,31 @@ export default function LoginPage() {
           {isSubmitting ? 'Entrando…' : 'Entrar'}
         </button>
       </form>
+
+      <LitoCodeCredit />
     </div>
+  );
+}
+
+function LitoCodeCredit() {
+  const content = (
+    <>
+      <span className="text-xs text-gray-500">Criado por</span>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/assets/litocode/logo.svg" alt="LitoCode" className="h-7 w-auto" />
+    </>
+  );
+  const cls = 'flex items-center gap-2';
+  if (!LITOCODE_WHATSAPP) return <div className={cls}>{content}</div>;
+  return (
+    <a
+      href={whatsappUrl(LITOCODE_WHATSAPP, 'Olá! Vi o sistema e gostaria de falar com a LitoCode.')}
+      target="_blank"
+      rel="noopener noreferrer"
+      title="Falar com a LitoCode no WhatsApp"
+      className={`${cls} opacity-90 transition hover:opacity-100`}
+    >
+      {content}
+    </a>
   );
 }

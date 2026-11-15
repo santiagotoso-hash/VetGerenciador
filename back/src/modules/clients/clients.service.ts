@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { currentCompanyId } from '../../common/tenant';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 
@@ -8,7 +9,7 @@ export class ClientsService {
   constructor(private prisma: PrismaService) {}
 
   async create(createClientDto: CreateClientDto) {
-    return this.prisma.client.create({ data: createClientDto });
+    return this.prisma.client.create({ data: { ...createClientDto, companyId: currentCompanyId() } });
   }
 
   async findAll(search?: string, active?: string) {

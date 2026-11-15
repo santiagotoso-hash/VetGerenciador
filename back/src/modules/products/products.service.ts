@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { currentCompanyId } from '../../common/tenant';
 import { CreateProductDto, UpdateProductDto } from './dto';
 
 @Injectable()
@@ -7,7 +8,7 @@ export class ProductsService {
   constructor(private prisma: PrismaService) {}
 
   create(dto: CreateProductDto) {
-    return this.prisma.product.create({ data: dto });
+    return this.prisma.product.create({ data: { ...dto, companyId: currentCompanyId() } });
   }
 
   findAll(search?: string, category?: string, active?: string) {

@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
@@ -8,7 +8,15 @@ import { z } from 'zod';
 import { api, errorMessage } from '@/lib/api';
 import type { Appointment, AppointmentStatus, AppointmentType, Pet, Service, User } from '@/types';
 import { btnGhost, btnPrimary, Card, Empty, ErrorBox, Field, inputCls, Modal, PageHeader } from '@/components/ui';
-import { statusColor, statusLabel, toLocalInput, typeLabel } from '@/lib/format';
+import { statusColor, statusLabel, toLocalInput, typeLabel, whatsappUrl } from '@/lib/format';
+
+function reminderText(a: Appointment) {
+  const d = new Date(a.date);
+  const dia = d.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' });
+  const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const servico = (a.service?.name ?? typeLabel[a.type]).toLowerCase();
+  return `Olá, ${a.pet?.client?.name}! Lembrando do agendamento (${servico}) de ${a.pet?.name} em ${dia}, às ${hora}. Podemos confirmar?`;
+}
 
 const types = Object.keys(typeLabel) as AppointmentType[];
 
@@ -99,14 +107,24 @@ export default function AgendaPage() {
   const selectedPet = pets.find((p) => p.id === form.watch('petId'));
   const clientEmail = selectedPet?.client?.email?.trim() || '';
 
-  const openNew = (key = selected) => {
+  const openNew = (key = selected, petId = '') => {
     setApiError('');
     setEditing(null);
     const d = parseDay(key);
     d.setHours(9, 0);
-    form.reset({ petId: '', type: 'CONSULTATION', date: toLocalInput(d), scheduledById: '', serviceId: '', notes: '', notifyClient: false });
+    form.reset({ petId, type: 'CONSULTATION', date: toLocalInput(d), scheduledById: '', serviceId: '', notes: '', notifyClient: false });
     setOpen(true);
   };
+
+  // /agenda?pet=<id> abre o formulário de novo agendamento com o pet já escolhido
+  useEffect(() => {
+    const petId = new URLSearchParams(window.location.search).get('pet');
+    if (petId) {
+      openNew(todayKey, petId);
+      window.history.replaceState(null, '', '/agenda');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const openEdit = (a: Appointment) => {
     setApiError('');
@@ -263,7 +281,15 @@ export default function AgendaPage() {
                   <div className="w-14 shrink-0 text-lg font-semibold text-primary-700">{time(a.date)}</div>
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-medium">
-                      {a.pet?.name} <span className="font-normal text-gray-500">· {a.pet?.client?.name}</span>
+                      <Link href={`/pets/${a.petId}`} className="hover:text-primary-700 hover:underline">{a.pet?.name}</Link>
+                      {a.pet?.client && (
+                        <span className="font-normal text-gray-500">
+                          {' · '}
+                          <Link href={`/clientes/${a.pet.clientId ?? a.pet.client.id}`} className="hover:text-primary-700 hover:underline">
+                            {a.pet.client.name}
+                          </Link>
+                        </span>
+                      )}
                     </div>
                     <div className="text-xs text-gray-500">
                       {a.service?.name ?? typeLabel[a.type]}
@@ -275,6 +301,19 @@ export default function AgendaPage() {
                   <Link href={`/pets/${a.petId}?aba=prontuario`} className="text-sm text-gray-600 hover:underline">
                     📋 Prontuário
                   </Link>
+                  {!closed && a.pet?.client?.phone && (
+                    <a
+                      href={whatsappUrl(a.pet.client.phone, reminderText(a))}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-sm text-green-700 hover:underline"
+                      title="Enviar lembrete por WhatsApp"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src="/icons/whatsapp.png" alt="" className="h-5 w-5" />
+                      Lembrete
+                    </a>
+                  )}
                   <div className="flex gap-3 text-sm">
                     {a.status !== 'CANCELLED' && (
                       <button className="text-gray-600 hover:underline" onClick={() => openEdit(a)}>Editar</button>

@@ -5,8 +5,8 @@ import { useParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import type { Appointment, Client, PaymentMethod, Sale } from '@/types';
-import { Card, Empty } from '@/components/ui';
-import { currency, dateTime, speciesIcon, speciesLabel, statusColor, statusLabel, typeLabel } from '@/lib/format';
+import { Card, Empty, WhatsAppIcon } from '@/components/ui';
+import { currency, dateTime, speciesIcon, speciesLabel, statusColor, statusLabel, typeLabel, whatsappUrl } from '@/lib/format';
 
 type Tab = 'dados' | 'pets' | 'agendamentos' | 'historico';
 
@@ -64,7 +64,7 @@ export default function ClienteDetailPage() {
   ];
 
   const fields: [string, string | null | undefined][] = [
-    ['Telefone', client.phone],
+    ['WhatsApp', client.phone],
     ['E-mail', client.email],
     ['CPF', client.cpf],
     ['Endereço', [client.address, client.city, client.state].filter(Boolean).join(', ')],
@@ -81,7 +81,15 @@ export default function ClienteDetailPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold">{client.name}</h1>
-            <p className="text-sm text-gray-500">{[client.phone, client.email].filter(Boolean).join(' · ')}</p>
+            <p className="text-sm text-gray-500">
+              {client.phone && (
+                <a href={whatsappUrl(client.phone)} target="_blank" rel="noopener noreferrer" className="text-green-700 hover:underline">
+                  <WhatsAppIcon /> {client.phone}
+                </a>
+              )}
+              {client.phone && client.email && ' · '}
+              {client.email && <a href={`mailto:${client.email}`} className="text-primary-700 hover:underline">{client.email}</a>}
+            </p>
           </div>
           <div className="text-right">
             <div className="text-xs text-gray-500">Total em compras</div>
@@ -112,7 +120,17 @@ export default function ClienteDetailPage() {
             {fields.map(([label, value]) => (
               <div key={label}>
                 <dt className="text-xs font-medium uppercase text-gray-500">{label}</dt>
-                <dd className="mt-0.5">{value || <span className="text-gray-400">—</span>}</dd>
+                <dd className="mt-0.5">
+                  {value && label === 'WhatsApp' ? (
+                    <a href={whatsappUrl(value)} target="_blank" rel="noopener noreferrer" className="text-green-700 hover:underline">
+                      <WhatsAppIcon /> {value}
+                    </a>
+                  ) : value && label === 'E-mail' ? (
+                    <a href={`mailto:${value}`} className="text-primary-700 hover:underline">{value}</a>
+                  ) : (
+                    value || <span className="text-gray-400">—</span>
+                  )}
+                </dd>
               </div>
             ))}
           </dl>

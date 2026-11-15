@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { currentCompanyId } from '../../common/tenant';
 import { CreateSaleDto } from './dto';
+import { assertExists } from '../../common/tenant-refs';
 
 const include = {
   client: true,
@@ -13,7 +15,9 @@ export class SalesService {
   constructor(private prisma: PrismaService) {}
 
   /** Cria a venda, baixa o estoque e lança a receita no financeiro, tudo numa transação. */
-  create(dto: CreateSaleDto, userId: string) {
+  async create(dto: CreateSaleDto, userId: string) {
+    if (dto.clientId) await assertExists(this.prisma.client.findUnique({ where: { id: dto.clientId } }), 'Cliente');
+    const companyId = currentCompanyId();
     return this.prisma.$transaction(async (tx) => {
       let subtotal = 0;
       const items: any[] = [];
@@ -54,6 +58,7 @@ export class SalesService {
         data: {
           clientId: dto.clientId,
           userId,
+          companyId,
           paymentMethod: dto.paymentMethod,
           discount,
           notes: dto.notes,
@@ -65,6 +70,7 @@ export class SalesService {
 
       await tx.financialEntry.create({
         data: {
+          companyId,
           type: 'INCOME',
           description: `Venda #${sale.id.slice(-6)}`,
           amount: total,

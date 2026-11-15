@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { currentCompanyId } from '../../common/tenant';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import * as bcrypt from 'bcryptjs';
@@ -21,7 +22,7 @@ export class UsersService {
     }
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
     const { password, refreshToken, ...rest } = await this.prisma.user.create({
-      data: { ...createUserDto, email, password: hashedPassword },
+      data: { ...createUserDto, email, password: hashedPassword, companyId: currentCompanyId() },
     });
     return rest;
   }
@@ -33,14 +34,20 @@ export class UsersService {
   }
 
   async findOne(id: string) {
-    const user = await this.prisma.user.findUnique({ where: { id } });
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      include: { company: { select: { id: true, name: true, logo: true, active: true } } },
+    });
     if (!user) throw new NotFoundException('Usuário não encontrado');
     const { password, refreshToken, ...rest } = user;
     return rest;
   }
 
   async findByEmail(email: string) {
-    return this.prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
+    return this.prisma.user.findUnique({
+      where: { email: email.trim().toLowerCase() },
+      include: { company: { select: { id: true, name: true, logo: true, active: true } } },
+    });
   }
 
   /** Impede deixar o sistema sem nenhum administrador ativo. */

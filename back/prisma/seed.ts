@@ -6,15 +6,23 @@ const prisma = new PrismaClient();
 async function main() {
   const hash = (p: string) => bcrypt.hashSync(p, 10);
 
+  // empresa de demonstração (a mesma que a migração multiempresa cria em bancos já existentes)
+  const company = await prisma.company.upsert({
+    where: { slug: 'vetpet-demo' },
+    update: {},
+    create: { id: 'company_legacy_demo', name: 'VetPet (demonstração)', slug: 'vetpet-demo' },
+  });
+  const companyId = company.id;
+
   await prisma.user.upsert({
     where: { email: 'admin@vetpet.com' },
     update: {},
-    create: { name: 'Administrador', email: 'admin@vetpet.com', password: hash('admin123'), role: 'ADMIN' },
+    create: { name: 'Administrador', email: 'admin@vetpet.com', password: hash('admin123'), role: 'ADMIN', companyId },
   });
   await prisma.user.upsert({
     where: { email: 'vet@vetpet.com' },
     update: {},
-    create: { name: 'Dra. Ana Souza', email: 'vet@vetpet.com', password: hash('vet12345'), role: 'VETERINARIAN' },
+    create: { name: 'Dra. Ana Souza', email: 'vet@vetpet.com', password: hash('vet12345'), role: 'VETERINARIAN', companyId },
   });
 
   const services = [
@@ -24,8 +32,8 @@ async function main() {
     { name: 'Tosa', category: 'Estética', price: 80, duration: 60 },
   ];
   for (const s of services) {
-    const exists = await prisma.service.findFirst({ where: { name: s.name } });
-    if (!exists) await prisma.service.create({ data: s });
+    const exists = await prisma.service.findFirst({ where: { name: s.name, companyId } });
+    if (!exists) await prisma.service.create({ data: { ...s, companyId } });
   }
 
   const products = [
@@ -34,7 +42,7 @@ async function main() {
     { name: 'Shampoo Neutro', category: 'HYGIENE', price: 32, costPrice: 18, stock: 15, minStock: 5, sku: 'SHA-01' },
   ];
   for (const p of products) {
-    await prisma.product.upsert({ where: { sku: p.sku }, update: {}, create: p });
+    await prisma.product.upsert({ where: { companyId_sku: { companyId, sku: p.sku } }, update: {}, create: { ...p, companyId } });
   }
 
   console.log('Seed concluído. Login: admin@vetpet.com / admin123');
