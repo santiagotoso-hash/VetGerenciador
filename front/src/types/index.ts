@@ -1,6 +1,17 @@
 // Tipos alinhados ao schema Prisma da API (back/prisma/schema.prisma)
 
-export type Role = 'ADMIN' | 'VETERINARIAN' | 'RECEPTIONIST' | 'GROOMER';
+export type Role = 'SUPER_ADMIN' | 'ADMIN' | 'VETERINARIAN' | 'RECEPTIONIST' | 'GROOMER';
+
+export interface Company {
+  id: string;
+  name: string;
+  slug: string;
+  logo?: string | null;
+  active: boolean;
+  createdAt: string;
+  _count?: { users?: number; clients: number; pets: number; appointments: number };
+  users?: { id?: string; name: string; email: string; role?: Role; active: boolean; phone?: string | null }[];
+}
 
 export interface User {
   id: string;
@@ -9,6 +20,8 @@ export interface User {
   role: Role;
   phone?: string;
   active: boolean;
+  companyId?: string | null;
+  company?: { id: string; name: string; logo?: string | null } | null;
   createdAt: string;
   updatedAt: string;
 }

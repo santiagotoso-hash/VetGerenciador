@@ -1,15 +1,18 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { currentCompanyId } from '../../common/tenant';
 import { CreatePetDto } from './dto/create-pet.dto';
 import { UpdatePetDto } from './dto/update-pet.dto';
+import { assertExists } from '../../common/tenant-refs';
 
 @Injectable()
 export class PetsService {
   constructor(private prisma: PrismaService) {}
 
   async create(createPetDto: CreatePetDto) {
+    await assertExists(this.prisma.client.findUnique({ where: { id: createPetDto.clientId } }), 'Cliente');
     return this.prisma.pet.create({
-      data: createPetDto,
+      data: { ...createPetDto, companyId: currentCompanyId() },
       include: { client: true },
     });
   }
@@ -62,6 +65,9 @@ export class PetsService {
 
   async update(id: string, updatePetDto: UpdatePetDto) {
     await this.findOne(id);
+    if (updatePetDto.clientId) {
+      await assertExists(this.prisma.client.findUnique({ where: { id: updatePetDto.clientId } }), 'Cliente');
+    }
     return this.prisma.pet.update({
       where: { id },
       data: { ...updatePetDto, ...(updatePetDto.photo === '' && { photo: null }) },

@@ -7,8 +7,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { api, errorMessage } from '@/lib/api';
 import type { Client, Pet, Species } from '@/types';
-import { btnGhost, btnPrimary, Card, Empty, ErrorBox, Field, inputCls, Modal, PageHeader } from '@/components/ui';
-import { speciesIcon, speciesLabel } from '@/lib/format';
+import { btnGhost, btnPrimary, Card, Empty, ErrorBox, Field, inputCls, Modal, PageHeader, WhatsAppIcon } from '@/components/ui';
+import { speciesIcon, speciesLabel, whatsappUrl } from '@/lib/format';
 
 const species = Object.keys(speciesLabel) as Species[];
 
@@ -48,6 +48,7 @@ function age(birth?: string | null) {
 export default function PetsPage() {
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
+  const [speciesFilter, setSpeciesFilter] = useState<Species | ''>('');
   const [editing, setEditing] = useState<Pet | 'new' | null>(null);
   const [apiError, setApiError] = useState('');
 
@@ -93,7 +94,7 @@ export default function PetsPage() {
   });
 
   const err = form.formState.errors;
-  const visible = pets.filter((p) => p.active);
+  const visible = pets.filter((p) => p.active && (!speciesFilter || p.species === speciesFilter));
 
   return (
     <>
@@ -103,12 +104,18 @@ export default function PetsPage() {
         action={<button className={btnPrimary} onClick={() => openModal('new')}>+ Novo pet</button>}
       />
 
-      <input
-        className={`${inputCls} mb-4 max-w-sm`}
-        placeholder="Buscar por nome ou raça…"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
+      <div className="mb-4 flex flex-wrap gap-3">
+        <input
+          className={`${inputCls} max-w-sm`}
+          placeholder="Buscar por nome ou raça…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <select className={`${inputCls} max-w-[11rem]`} value={speciesFilter} onChange={(e) => setSpeciesFilter(e.target.value as Species | '')}>
+          <option value="">Todas as espécies</option>
+          {species.map((s) => <option key={s} value={s}>{speciesIcon[s]} {speciesLabel[s]}</option>)}
+        </select>
+      </div>
 
       <Card className="overflow-x-auto">
         {visible.length === 0 ? (
@@ -134,7 +141,20 @@ export default function PetsPage() {
                   </td>
                   <td className="hidden px-4 py-3 text-gray-500 sm:table-cell">{p.breed ?? speciesLabel[p.species]}</td>
                   <td className="hidden px-4 py-3 text-gray-500 md:table-cell">{age(p.birthDate)}</td>
-                  <td className="px-4 py-3">{p.client?.name}</td>
+                  <td className="px-4 py-3">
+                    <Link href={`/clientes/${p.clientId}`} className="text-primary-700 hover:underline">{p.client?.name}</Link>
+                    {p.client?.phone && (
+                      <a
+                        href={whatsappUrl(p.client.phone)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={`WhatsApp: ${p.client.phone}`}
+                        className="ml-2 hover:opacity-70"
+                      >
+                        <WhatsAppIcon className="h-5 w-5" />
+                      </a>
+                    )}
+                  </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">
                     <button className="mr-3 text-primary-600 hover:underline" onClick={() => openModal(p)}>Editar</button>
                     <button

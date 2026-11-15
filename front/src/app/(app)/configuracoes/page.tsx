@@ -11,18 +11,20 @@ import { btnGhost, btnPrimary, Card, Empty, ErrorBox, Field, inputCls, Modal, Pa
 import { currency } from '@/lib/format';
 
 const roleLabel: Record<Role, string> = {
+  SUPER_ADMIN: 'Superadmin',
   ADMIN: 'Administrador',
   RECEPTIONIST: 'Atendente',
   VETERINARIAN: 'Veterinário',
   GROOMER: 'Banho e tosa',
 };
 const roleHelp: Record<Role, string> = {
+  SUPER_ADMIN: 'Gerencia as empresas do sistema',
   ADMIN: 'Acesso total, inclusive financeiro e usuários',
   RECEPTIONIST: 'Clientes, pets, agenda, estoque e vendas',
   VETERINARIAN: 'Atendimentos e prontuários',
   GROOMER: 'Agenda de banho e tosa',
 };
-const roles = Object.keys(roleLabel) as Role[];
+const roles = (Object.keys(roleLabel) as Role[]).filter((r) => r !== 'SUPER_ADMIN');
 
 export default function ConfiguracoesPage() {
   const me = useAuthStore((s) => s.user);
@@ -99,7 +101,7 @@ function UsersTab({ meId }: { meId?: string }) {
     form.reset(
       u === 'new'
         ? { name: '', email: '', role: 'RECEPTIONIST', phone: '', password: '' }
-        : { name: u.name, email: u.email, role: u.role, phone: u.phone ?? '', password: '' },
+        : { name: u.name, email: u.email, role: u.role as UserForm['role'], phone: u.phone ?? '', password: '' },
     );
   };
 

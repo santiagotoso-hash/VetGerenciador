@@ -6,6 +6,8 @@ interface AuthUser {
   name: string;
   email: string;
   role: string;
+  companyId?: string | null;
+  company?: { id: string; name: string; logo?: string | null } | null;
 }
 
 interface AuthState {

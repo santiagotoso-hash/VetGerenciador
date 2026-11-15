@@ -1,5 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { currentCompanyId } from '../../common/tenant';
+import { assertExists } from '../../common/tenant-refs';
 import { CreateMedicalRecordDto, UpdateMedicalRecordDto } from './dto';
 
 const include = {
@@ -11,9 +13,10 @@ const include = {
 export class MedicalRecordsService {
   constructor(private prisma: PrismaService) {}
 
-  create(dto: CreateMedicalRecordDto, veterinarianId: string) {
+  async create(dto: CreateMedicalRecordDto, veterinarianId: string) {
+    await assertExists(this.prisma.pet.findUnique({ where: { id: dto.petId } }), 'Pet');
     return this.prisma.medicalRecord.create({
-      data: { ...dto, date: dto.date ? new Date(dto.date) : undefined, veterinarianId },
+      data: { ...dto, date: dto.date ? new Date(dto.date) : undefined, veterinarianId, companyId: currentCompanyId() },
       include,
     });
   }

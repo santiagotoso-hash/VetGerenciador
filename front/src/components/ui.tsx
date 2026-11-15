@@ -97,3 +97,11 @@ export function ErrorBox({ message }: { message?: string }) {
   if (!message) return null;
   return <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{message}</div>;
 }
+
+/** Ícone do WhatsApp (public/icons/whatsapp.png) para links de telefone. */
+export function WhatsAppIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src="/icons/whatsapp.png" alt="WhatsApp" className={`inline-block shrink-0 align-text-bottom ${className}`} />
+  );
+}

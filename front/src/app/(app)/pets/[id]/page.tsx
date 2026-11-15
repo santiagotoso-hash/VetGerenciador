@@ -8,8 +8,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { api, errorMessage } from '@/lib/api';
 import type { Appointment, MedicalRecord, Pet } from '@/types';
-import { btnGhost, btnPrimary, Card, Empty, ErrorBox, Field, inputCls, Modal } from '@/components/ui';
-import { dateTime, speciesIcon, speciesLabel, statusColor, statusLabel, toLocalInput, typeLabel } from '@/lib/format';
+import { btnGhost, btnPrimary, Card, Empty, ErrorBox, Field, inputCls, Modal, WhatsAppIcon } from '@/components/ui';
+import { dateTime, speciesIcon, speciesLabel, statusColor, statusLabel, toLocalInput, typeLabel, whatsappUrl } from '@/lib/format';
 
 type Tab = 'dados' | 'prontuario' | 'agendamentos';
 
@@ -168,6 +168,14 @@ export default function PetDetailPage() {
 
   const err = form.formState.errors;
   const canBirthday = !!pet.birthDate && !!pet.client?.email?.trim();
+  const now = Date.now();
+  const nextAppt = appointments
+    .filter((a) => (a.status === 'SCHEDULED' || a.status === 'CONFIRMED') && new Date(a.date).getTime() >= now)
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0];
+  const lastVaccine = appointments
+    .filter((a) => a.type === 'VACCINATION' && a.status === 'COMPLETED')
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+  const vaccineOld = !lastVaccine || now - new Date(lastVaccine.date).getTime() > 365 * 864e5;
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: 'dados', label: 'Dados' },
     { key: 'prontuario', label: 'Prontuário', count: records.length },
@@ -205,10 +213,32 @@ export default function PetDetailPage() {
                 .join(' · ')}
             </p>
             <p className="text-sm text-gray-500">
-              Tutor: <span className="font-medium text-gray-700">{pet.client?.name}</span>
-              {pet.client?.phone && ` · ${pet.client.phone}`}
+              Tutor:{' '}
+              <Link href={`/clientes/${pet.clientId}`} className="font-medium text-primary-700 hover:underline">
+                {pet.client?.name}
+              </Link>
+              {pet.client?.phone && (
+                <>
+                  {' · '}
+                  <a href={whatsappUrl(pet.client.phone)} target="_blank" rel="noopener noreferrer" className="text-green-700 hover:underline">
+                    <WhatsAppIcon /> {pet.client.phone}
+                  </a>
+                </>
+              )}
             </p>
           </div>
+          <Link href={`/agenda?pet=${pet.id}`} className={btnPrimary}>+ Agendar</Link>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2 text-sm">
+          <span className={`rounded-lg px-3 py-1.5 ${nextAppt ? 'bg-sky-50 text-sky-700' : 'bg-gray-50 text-gray-500'}`}>
+            📅 {nextAppt ? `Próximo: ${typeLabel[nextAppt.type]} em ${dateTime(nextAppt.date)}` : 'Sem agendamento futuro'}
+          </span>
+          <span className={`rounded-lg px-3 py-1.5 ${vaccineOld ? 'bg-amber-50 text-amber-700' : 'bg-green-50 text-green-700'}`}>
+            💉{' '}
+            {lastVaccine
+              ? `Última vacinação: ${new Date(lastVaccine.date).toLocaleDateString('pt-BR')}${vaccineOld ? ' (há mais de 1 ano)' : ''}`
+              : 'Nenhuma vacinação registrada'}
+          </span>
         </div>
         <ErrorBox message={apiError} />
         {pet.allergies && (

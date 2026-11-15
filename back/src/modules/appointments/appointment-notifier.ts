@@ -48,7 +48,7 @@ export class AppointmentNotifier implements OnModuleInit, OnModuleDestroy {
   private body(a: any, intro: string, changes: string[] = []) {
     const when = this.when(a.date);
     return `<div style="font-family:Arial,sans-serif;max-width:520px">
-      <h2 style="color:#0d9488">🐾 VetPet</h2>
+      <h2 style="color:#0d9488">🐾 ${esc(a.company?.name ?? 'VetPet')}</h2>
       <p>Olá, ${esc(a.pet.client.name)}!</p>
       <p>${intro}</p>
       ${changes.length ? `<ul style="color:#b45309">${changes.map((c) => `<li>${c}</li>`).join('')}</ul>` : ''}
@@ -65,7 +65,7 @@ export class AppointmentNotifier implements OnModuleInit, OnModuleDestroy {
   private load(id: string) {
     return this.prisma.appointment.findUnique({
       where: { id },
-      include: { pet: { include: { client: true } }, service: true, veterinarian: { select: { name: true } } },
+      include: { pet: { include: { client: true } }, service: true, veterinarian: { select: { name: true } }, company: { select: { name: true } } },
     });
   }
 
@@ -112,7 +112,7 @@ export class AppointmentNotifier implements OnModuleInit, OnModuleDestroy {
     const [y, m, d] = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date()).split('-').map(Number);
     const pets = await this.prisma.pet.findMany({
       where: { active: true, birthdayEmail: true, birthDate: { not: null }, OR: [{ birthdayEmailYear: null }, { birthdayEmailYear: { lt: y } }] },
-      include: { client: true },
+      include: { client: true, company: { select: { name: true } } },
     });
     for (const p of pets) {
       const b = p.birthDate!;
@@ -122,7 +122,7 @@ export class AppointmentNotifier implements OnModuleInit, OnModuleDestroy {
       if (!to) continue;
       const years = y - b.getUTCFullYear();
       const html = `<div style="font-family:Arial,sans-serif;max-width:520px;text-align:center">
-        <h2 style="color:#0d9488">🐾 VetPet</h2>
+        <h2 style="color:#0d9488">🐾 ${esc(p.company?.name ?? 'VetPet')}</h2>
         ${p.photo ? `<img src="${p.photo}" alt="${esc(p.name)}" style="width:160px;height:160px;border-radius:50%;object-fit:cover">` : '<div style="font-size:64px">🎂</div>'}
         <h3>Feliz aniversário, ${esc(p.name)}! 🎉</h3>
         <p>Olá, ${esc(p.client.name)}! Hoje ${esc(p.name)} completa <b>${years} ano${years === 1 ? '' : 's'}</b>.<br>Toda a equipe da clínica deseja muita saúde, carinho e petiscos! 🦴</p></div>`;
@@ -141,7 +141,7 @@ export class AppointmentNotifier implements OnModuleInit, OnModuleDestroy {
         status: { in: ['SCHEDULED', 'CONFIRMED'] },
         date: { gt: now, lte: new Date(now.getTime() + DAY) },
       },
-      include: { pet: { include: { client: true } }, service: true, veterinarian: { select: { name: true } } },
+      include: { pet: { include: { client: true } }, service: true, veterinarian: { select: { name: true } }, company: { select: { name: true } } },
     });
     for (const a of list) {
       // agendado já dentro das 24h: a confirmação serve como aviso, sem lembrete duplicado

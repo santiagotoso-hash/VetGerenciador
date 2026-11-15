@@ -8,8 +8,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { api, errorMessage } from '@/lib/api';
 import type { Client } from '@/types';
-import { btnGhost, btnPrimary, Card, Empty, ErrorBox, Field, inputCls, Modal, PageHeader } from '@/components/ui';
-import { speciesIcon } from '@/lib/format';
+import { btnGhost, btnPrimary, Card, Empty, ErrorBox, Field, inputCls, Modal, PageHeader, WhatsAppIcon } from '@/components/ui';
+import { speciesIcon, whatsappUrl } from '@/lib/format';
 
 const schema = z.object({
   name: z.string().min(2, 'Informe o nome'),
@@ -132,11 +132,17 @@ export default function ClientesPage() {
                   <td className="px-4 py-3 font-medium">
                     <Link href={`/clientes/${c.id}`} className="text-primary-700 hover:underline">{c.name}</Link>
                   </td>
-                  <td className="px-4 py-3">{c.phone}</td>
-                  <td className="hidden px-4 py-3 text-gray-500 md:table-cell">{c.email ?? '—'}</td>
+                  <td className="px-4 py-3">
+                    <a href={whatsappUrl(c.phone)} target="_blank" rel="noopener noreferrer" className="text-green-700 hover:underline">
+                      <WhatsAppIcon /> {c.phone}
+                    </a>
+                  </td>
+                  <td className="hidden px-4 py-3 text-gray-500 md:table-cell">
+                    {c.email ? <a href={`mailto:${c.email}`} className="text-primary-700 hover:underline">{c.email}</a> : '—'}
+                  </td>
                   <td className="px-4 py-3">
                     {c.pets?.filter((p) => p.active).map((p) => (
-                      <span key={p.id} title={p.name} className="mr-1">{speciesIcon[p.species]}</span>
+                      <Link key={p.id} href={`/pets/${p.id}`} title={p.name} className="mr-1 hover:opacity-70">{speciesIcon[p.species]}</Link>
                     ))}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">

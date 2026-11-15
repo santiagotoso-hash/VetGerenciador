@@ -56,6 +56,13 @@ export const typeLabel: Record<AppointmentType, string> = {
   RETURN: 'Retorno',
 };
 
+/** Link wa.me para um telefone brasileiro (adiciona o DDI 55 quando falta). */
+export const whatsappUrl = (phone: string, text?: string) => {
+  let d = phone.replace(/\D/g, '');
+  if (d.length === 10 || d.length === 11) d = `55${d}`;
+  return `https://wa.me/${d}${text ? `?text=${encodeURIComponent(text)}` : ''}`;
+};
+
 /** datetime-local value (yyyy-MM-ddTHH:mm) no fuso local */
 export const toLocalInput = (d: Date) => {
   const p = (n: number) => String(n).padStart(2, '0');
