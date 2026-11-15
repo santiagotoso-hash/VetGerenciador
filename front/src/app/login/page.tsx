@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -21,6 +21,19 @@ export default function LoginPage() {
   const router = useRouter();
   const setAuth = useAuthStore((s) => s.setAuth);
   const [error, setError] = useState('');
+
+  // motivo do bloqueio (empresa sem pagamento), guardado quando a API respondeu 402 durante o uso
+  useEffect(() => {
+    try {
+      const notice = sessionStorage.getItem('login-notice');
+      if (notice) {
+        setError(notice);
+        sessionStorage.removeItem('login-notice');
+      }
+    } catch {
+      /* ignora */
+    }
+  }, []);
   const {
     register,
     handleSubmit,

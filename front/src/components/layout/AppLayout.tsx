@@ -2,6 +2,9 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '@/lib/api';
+import { billingNotice, type Billing } from '@/lib/billing';
 import { useAuthStore } from '@/store/auth.store';
 import { useRouter } from 'next/navigation';
 
@@ -23,6 +26,15 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user, logout } = useAuthStore();
   const router = useRouter();
+
+  // situação da cobrança, atualizada ao abrir o app: o admin da empresa vê avisos de teste/vencimento
+  const { data: me } = useQuery({
+    queryKey: ['me'],
+    queryFn: async () => (await api.get<{ company?: { billing?: Billing | null } | null }>('/auth/me')).data,
+    enabled: user?.role === 'ADMIN',
+    refetchOnWindowFocus: true,
+  });
+  const notice = user?.role === 'ADMIN' ? billingNotice(me?.company?.billing) : null;
 
   const handleLogout = () => {
     logout();
@@ -103,6 +115,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </button>
           </div>
         </header>
+        {notice && (
+          <div className="shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-sm text-amber-800">⚠️ {notice}</div>
+        )}
         <main className="flex-1 overflow-auto p-4 sm:p-6">{children}</main>
       </div>
     </div>

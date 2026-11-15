@@ -23,6 +23,17 @@ api.interceptors.response.use(
       localStorage.removeItem('auth-storage');
       window.location.href = '/login';
     }
+    // 402 = empresa bloqueada por cobrança: encerra a sessão e mostra o motivo no login
+    if (error.response?.status === 402 && !isLogin && typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem('login-notice', error.response.data?.message ?? 'Acesso bloqueado. Fale com a LitoCode.');
+      } catch {
+        /* sem sessionStorage: só volta ao login */
+      }
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('auth-storage');
+      window.location.href = '/login';
+    }
     return Promise.reject(error);
   },
 );
