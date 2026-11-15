@@ -69,6 +69,31 @@ model Company {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Dados cadastrais da empresa e do proprietário (editados pelo superadmin).
+  cnpj          String?
+  phone         String?
+  email         String?
+  address       String?
+  city          String?
+  state         String?
+  zipCode       String?
+  notes         String?
+  ownerName     String?
+  ownerEmail    String?
+  ownerPhone    String?
+  ownerDocument String?
+
+  // Cobrança (controlada pelo superadmin). Sem teste, sem pagamento e sem início = "sem cobrança" (nunca bloqueia).
+  trialEndsAt          DateTime?
+  paidUntil            DateTime? @db.Date
+  monthlyFeeCents      Int?
+  billingStartDate     DateTime? @db.Date
+  // Cobrança por e-mail: financeiro da empresa, dia do envio e último mês enviado ("AAAA-MM").
+  billingEmail         String?
+  billingDay           Int?
+  billingLastSentMonth String?
+
+  payments         Payment[]
   users            User[]
   clients          Client[]
   pets             Pet[]
@@ -91,6 +116,7 @@ model User {
   phone        String?
   active       Boolean  @default(true)
   refreshToken String?
+  lastLoginAt  DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -323,4 +349,22 @@ model FinancialEntry {
   company   Company @relation(fields: [companyId], references: [id])
   @@index([companyId])
   @@map("financial_entries")
+}
+
+/// Mensalidade recebida de uma empresa (lançada pelo superadmin).
+model Payment {
+  id          String   @id @default(cuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id])
+  amountCents Int
+  paidAt      DateTime @db.Date
+  periodStart DateTime @db.Date
+  periodEnd   DateTime @db.Date
+  method      String
+  note        String?
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@index([companyId, periodEnd])
+  @@map("payments")
 }

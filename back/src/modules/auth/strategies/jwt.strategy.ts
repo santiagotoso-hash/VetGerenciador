@@ -1,8 +1,9 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { HttpException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { UsersService } from '../../users/users.service';
+import { blockedMessage, computeBilling } from '../../billing/billing';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -27,13 +28,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (user.companyId && user.company && !user.company.active) {
       throw new UnauthorizedException('Empresa desativada');
     }
+    const billing = user.company ? computeBilling(user.company) : null;
+    // teste encerrado ou mensalidade atrasada além da tolerância: bloqueia (exceto o superadmin)
+    if (billing?.blocked && user.role !== 'SUPER_ADMIN') throw new HttpException(blockedMessage(billing), 402);
     return {
       id: user.id,
       email: user.email,
       name: user.name,
       role: user.role,
       companyId: user.companyId ?? null,
-      company: user.company ? { id: user.company.id, name: user.company.name, logo: user.company.logo } : null,
+      company: user.company ? { id: user.company.id, name: user.company.name, logo: user.company.logo, billing } : null,
     };
   }
 }

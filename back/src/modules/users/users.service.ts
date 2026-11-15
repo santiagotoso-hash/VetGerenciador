@@ -10,6 +10,12 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import * as bcrypt from 'bcryptjs';
 
+/** Empresa do usuário + o que a cobrança precisa para decidir bloqueio e avisos. */
+const COMPANY_SELECT = {
+  id: true, name: true, logo: true, active: true,
+  trialEndsAt: true, paidUntil: true, monthlyFeeCents: true, billingStartDate: true,
+};
+
 @Injectable()
 export class UsersService {
   constructor(private prisma: PrismaService) {}
@@ -36,7 +42,7 @@ export class UsersService {
   async findOne(id: string) {
     const user = await this.prisma.user.findUnique({
       where: { id },
-      include: { company: { select: { id: true, name: true, logo: true, active: true } } },
+      include: { company: { select: COMPANY_SELECT } },
     });
     if (!user) throw new NotFoundException('Usuário não encontrado');
     const { password, refreshToken, ...rest } = user;
@@ -46,7 +52,7 @@ export class UsersService {
   async findByEmail(email: string) {
     return this.prisma.user.findUnique({
       where: { email: email.trim().toLowerCase() },
-      include: { company: { select: { id: true, name: true, logo: true, active: true } } },
+      include: { company: { select: COMPANY_SELECT } },
     });
   }
 

@@ -1,13 +1,15 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+import type { Billing } from '@/lib/billing';
+
 interface AuthUser {
   id: string;
   name: string;
   email: string;
   role: string;
   companyId?: string | null;
-  company?: { id: string; name: string; logo?: string | null } | null;
+  company?: { id: string; name: string; logo?: string | null; billing?: Billing | null } | null;
 }
 
 interface AuthState {

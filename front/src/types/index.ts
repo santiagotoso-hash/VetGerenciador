@@ -2,6 +2,18 @@
 
 export type Role = 'SUPER_ADMIN' | 'ADMIN' | 'VETERINARIAN' | 'RECEPTIONIST' | 'GROOMER';
 
+import type { Billing } from '@/lib/billing';
+
+export interface Payment {
+  id: string;
+  amountCents: number;
+  paidAt: string;
+  periodStart: string;
+  periodEnd: string;
+  method: string;
+  note?: string | null;
+}
+
 export interface Company {
   id: string;
   name: string;
@@ -9,6 +21,22 @@ export interface Company {
   logo?: string | null;
   active: boolean;
   createdAt: string;
+  cnpj?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zipCode?: string | null;
+  notes?: string | null;
+  ownerName?: string | null;
+  ownerEmail?: string | null;
+  ownerPhone?: string | null;
+  ownerDocument?: string | null;
+  billing: Billing;
+  invoice: { email: string | null; day: number | null; lastSentMonth: string | null; next: string | null; ready: boolean };
+  lastPayment: { paidAt: string; amountCents: number } | null;
+  activeUsers?: number;
   _count?: { users?: number; clients: number; pets: number; appointments: number };
   users?: { id?: string; name: string; email: string; role?: Role; active: boolean; phone?: string | null }[];
 }
@@ -21,7 +49,7 @@ export interface User {
   phone?: string;
   active: boolean;
   companyId?: string | null;
-  company?: { id: string; name: string; logo?: string | null } | null;
+  company?: { id: string; name: string; logo?: string | null; billing?: Billing | null } | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -8,6 +9,7 @@ import { api, errorMessage } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import type { Company, Role } from '@/types';
 import { btnGhost, btnPrimary, Card, Empty, ErrorBox, Field, inputCls, Modal, PageHeader } from '@/components/ui';
+import { billingStatus, formatMoney, formatYmd, parseMoney, toneClass } from '@/lib/billing';
 
 const roleLabel: Partial<Record<Role, string>> = {
   ADMIN: 'Administrador',
@@ -26,6 +28,8 @@ const schema = z.object({
   admin: person,
   withAttendant: z.boolean(),
   attendant: z.object({ name: z.string(), email: z.string(), password: z.string() }),
+  trialDays: z.string(),
+  fee: z.string(),
 });
 type Form = z.infer<typeof schema>;
 
@@ -34,13 +38,14 @@ const emptyForm: Form = {
   admin: { name: '', email: '', password: '' },
   withAttendant: true,
   attendant: { name: 'Atendente', email: '', password: '' },
+  trialDays: '15',
+  fee: '',
 };
 
 export default function EmpresasPage() {
   const me = useAuthStore((s) => s.user);
   const qc = useQueryClient();
   const [creating, setCreating] = useState(false);
-  const [managing, setManaging] = useState<string | null>(null);
   const [apiError, setApiError] = useState('');
 
   const { data: companies = [], isLoading } = useQuery({
@@ -56,7 +61,15 @@ export default function EmpresasPage() {
     mutationFn: async (f: Form) => {
       const att = f.attendant;
       const users = f.withAttendant && att.email ? [{ ...att, role: 'RECEPTIONIST' }] : [];
-      return api.post('/companies', { name: f.name, admin: f.admin, ...(users.length && { users }) });
+      const trialDays = f.trialDays.trim() === '' ? undefined : Number(f.trialDays);
+      const monthlyFeeCents = parseMoney(f.fee);
+      return api.post('/companies', {
+        name: f.name,
+        admin: f.admin,
+        ...(users.length && { users }),
+        ...(trialDays !== undefined && Number.isInteger(trialDays) && { trialDays }),
+        ...(monthlyFeeCents && { monthlyFeeCents }),
+      });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['companies'] });
@@ -74,6 +87,13 @@ export default function EmpresasPage() {
     return <Card className="p-10 text-center text-gray-500">Acesso restrito ao superadmin.</Card>;
   }
 
+  // Resumo financeiro: receita mensal prevista (empresas ativas com cobrança), em teste e atrasadas.
+  const billed = companies.filter((c) => c.active && c.billing.state !== 'none');
+  const monthlyRevenue = billed.reduce((sum, c) => sum + (c.billing.monthlyFeeCents ?? 0), 0);
+  const inTrial = companies.filter((c) => c.billing.state === 'trial').length;
+  const late = companies.filter((c) => c.billing.state === 'overdue' || c.billing.state === 'trial_expired').length;
+  const blocked = companies.filter((c) => c.billing.blocked).length;
+
   const err = form.formState.errors;
   const openCreate = () => {
     setApiError('');
@@ -89,6 +109,20 @@ export default function EmpresasPage() {
         action={<button className={btnPrimary} onClick={openCreate}>+ Nova empresa</button>}
       />
 
+      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+        {[
+          [formatMoney(monthlyRevenue), 'Receita mensal prevista', 'text-primary-700'],
+          [String(inTrial), 'Em teste grátis', 'text-amber-600'],
+          [String(late), 'Com pagamento atrasado', 'text-red-600'],
+          [String(blocked), 'Bloqueadas', 'text-gray-700'],
+        ].map(([value, label, color]) => (
+          <Card key={label} className="p-4">
+            <div className={`text-2xl font-bold ${color}`}>{value}</div>
+            <div className="text-xs text-gray-500">{label}</div>
+          </Card>
+        ))}
+      </div>
+
       <Card className="overflow-x-auto">
         {companies.length === 0 ? (
           <Empty>{isLoading ? 'Carregando…' : 'Nenhuma empresa cadastrada'}</Empty>
@@ -98,7 +132,8 @@ export default function EmpresasPage() {
               <tr>
                 <th className="px-4 py-3">Empresa</th>
                 <th className="hidden px-4 py-3 md:table-cell">Administrador</th>
-                <th className="hidden px-4 py-3 sm:table-cell">Dados</th>
+                <th className="hidden px-4 py-3 lg:table-cell">Dados</th>
+                <th className="px-4 py-3">Cobrança</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3" />
               </tr>
@@ -106,29 +141,46 @@ export default function EmpresasPage() {
             <tbody className="divide-y divide-gray-100">
               {companies.map((c) => (
                 <tr key={c.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium">{c.name}</td>
+                  <td className="px-4 py-3 font-medium">
+                    <Link href={`/empresas/${c.id}`} className="flex items-center gap-2 text-primary-700 hover:underline">
+                      {c.logo ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={c.logo} alt="" className="h-8 w-8 rounded-md object-cover" />
+                      ) : (
+                        <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary-50 text-xs font-semibold">{c.name.charAt(0)}</span>
+                      )}
+                      {c.name}
+                    </Link>
+                  </td>
                   <td className="hidden px-4 py-3 text-gray-500 md:table-cell">
                     {c.users?.map((u) => u.email).join(', ') || '—'}
                   </td>
-                  <td className="hidden px-4 py-3 text-gray-500 sm:table-cell">
-                    {c._count?.users ?? 0} usuário(s) · {c._count?.clients ?? 0} cliente(s) · {c._count?.pets ?? 0} pet(s)
+                  <td className="hidden px-4 py-3 text-gray-500 lg:table-cell">
+                    {c.activeUsers ?? 0} usuário(s) ativo(s) · {c._count?.clients ?? 0} cliente(s) · {c._count?.pets ?? 0} pet(s)
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`rounded-full px-2 py-0.5 text-xs ${toneClass[billingStatus(c.billing).tone]}`}>{billingStatus(c.billing).label}</span>
+                    <div className="mt-1 text-xs text-gray-500">
+                      {c.billing.monthlyFeeCents != null && <>{formatMoney(c.billing.monthlyFeeCents)}/mês</>}
+                      {c.lastPayment && <> · último pagamento {formatYmd(c.lastPayment.paidAt)}</>}
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <span className={`rounded-full px-2 py-0.5 text-xs ${c.active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                      {c.active ? 'Ativa' : 'Desativada'}
+                      {c.active ? 'Ativa' : 'Suspensa'}
                     </span>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">
-                    <button className="mr-3 text-primary-600 hover:underline" onClick={() => setManaging(c.id)}>Usuários</button>
+                    <Link className="mr-3 text-primary-600 hover:underline" href={`/empresas/${c.id}`}>Abrir</Link>
                     <button
                       className={c.active ? 'text-red-500 hover:underline' : 'text-primary-600 hover:underline'}
                       onClick={() =>
                         (c.active
-                          ? confirm(`Desativar ${c.name}? Os usuários da empresa perdem o acesso até você reativar.`)
+                          ? confirm(`Suspender ${c.name}? Ninguém da empresa consegue entrar até você reativar.`)
                           : true) && toggle.mutate(c)
                       }
                     >
-                      {c.active ? 'Desativar' : 'Reativar'}
+                      {c.active ? 'Suspender' : 'Reativar'}
                     </button>
                   </td>
                 </tr>
@@ -156,6 +208,13 @@ export default function EmpresasPage() {
             </Field>
           </div>
 
+          <p className="pt-1 text-xs font-semibold uppercase text-gray-500">Cobrança</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Teste grátis (dias)"><input type="number" min={0} max={365} className={inputCls} {...form.register('trialDays')} /></Field>
+            <Field label="Mensalidade (R$)"><input inputMode="decimal" placeholder="Ex.: 199,90" className={inputCls} {...form.register('fee')} /></Field>
+          </div>
+          <p className="text-xs text-gray-500">0 dias = sem teste (cobra desde hoje). Em branco = sem cobrança por enquanto. Depois registre os pagamentos em “Cobrança”.</p>
+
           <label className="flex items-center gap-2 pt-1 text-sm">
             <input type="checkbox" {...form.register('withAttendant')} /> Criar também um atendente
           </label>
@@ -177,91 +236,6 @@ export default function EmpresasPage() {
         </form>
       </Modal>
 
-      <UsersModal companyId={managing} onClose={() => setManaging(null)} />
     </>
-  );
-}
-
-function UsersModal({ companyId, onClose }: { companyId: string | null; onClose: () => void }) {
-  const qc = useQueryClient();
-  const [error, setError] = useState('');
-  const [nu, setNu] = useState({ name: '', email: '', password: '', role: 'RECEPTIONIST' });
-
-  const { data: company } = useQuery({
-    queryKey: ['companies', companyId],
-    queryFn: async () => (await api.get<Company>(`/companies/${companyId}`)).data,
-    enabled: !!companyId,
-  });
-
-  const refresh = () => {
-    qc.invalidateQueries({ queryKey: ['companies'] });
-    setError('');
-  };
-  const add = useMutation({
-    mutationFn: async () => api.post(`/companies/${companyId}/users`, nu),
-    onSuccess: () => {
-      refresh();
-      setNu({ name: '', email: '', password: '', role: 'RECEPTIONIST' });
-    },
-    onError: (e) => setError(errorMessage(e)),
-  });
-  const patch = useMutation({
-    mutationFn: async (v: { userId: string; data: { active?: boolean; password?: string } }) =>
-      api.patch(`/companies/${companyId}/users/${v.userId}`, v.data),
-    onSuccess: refresh,
-    onError: (e) => setError(errorMessage(e)),
-  });
-
-  return (
-    <Modal open={!!companyId} onClose={onClose} title={company ? `Usuários — ${company.name}` : 'Usuários'}>
-      <ErrorBox message={error} />
-      <ul className="divide-y divide-gray-100 text-sm">
-        {company?.users?.map((u) => (
-          <li key={u.id} className="flex flex-wrap items-center gap-2 py-2">
-            <div className="min-w-0 flex-1">
-              <div className="truncate font-medium">{u.name} <span className="font-normal text-gray-500">· {u.role && roleLabel[u.role]}</span></div>
-              <div className="truncate text-xs text-gray-500">{u.email}</div>
-            </div>
-            <button
-              className="text-primary-600 hover:underline"
-              onClick={() => {
-                const password = prompt(`Nova senha para ${u.email} (mínimo 6 caracteres):`);
-                if (password) patch.mutate({ userId: u.id!, data: { password } });
-              }}
-            >
-              Redefinir senha
-            </button>
-            <button
-              className={u.active ? 'text-red-500 hover:underline' : 'text-primary-600 hover:underline'}
-              onClick={() => patch.mutate({ userId: u.id!, data: { active: !u.active } })}
-            >
-              {u.active ? 'Desativar' : 'Ativar'}
-            </button>
-          </li>
-        ))}
-      </ul>
-
-      <form
-        className="mt-4 space-y-2 border-t border-gray-100 pt-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          add.mutate();
-        }}
-      >
-        <p className="text-xs font-semibold uppercase text-gray-500">Adicionar usuário</p>
-        <div className="grid gap-2 sm:grid-cols-2">
-          <input required className={inputCls} placeholder="Nome" value={nu.name} onChange={(e) => setNu({ ...nu, name: e.target.value })} />
-          <select className={inputCls} value={nu.role} onChange={(e) => setNu({ ...nu, role: e.target.value })}>
-            {Object.entries(roleLabel).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-          <input required type="email" className={inputCls} placeholder="E-mail" value={nu.email} onChange={(e) => setNu({ ...nu, email: e.target.value })} />
-          <input required minLength={6} className={inputCls} placeholder="Senha inicial" value={nu.password} onChange={(e) => setNu({ ...nu, password: e.target.value })} />
-        </div>
-        <div className="flex justify-end gap-2 pt-1">
-          <button type="button" className={btnGhost} onClick={onClose}>Fechar</button>
-          <button type="submit" className={btnPrimary} disabled={add.isPending}>{add.isPending ? 'Adicionando…' : 'Adicionar'}</button>
-        </div>
-      </form>
-    </Modal>
   );
 }

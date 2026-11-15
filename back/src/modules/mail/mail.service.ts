@@ -31,6 +31,18 @@ export class MailService {
     return !!this.transporter;
   }
 
+  /** Envia e LANÇA erro se não conseguir (usado na cobrança, em que o superadmin precisa saber da falha). */
+  async sendStrict(opts: {
+    to: string | string[];
+    subject: string;
+    html: string;
+    text?: string;
+    attachments?: { filename: string; content: Buffer }[];
+  }) {
+    if (!this.transporter) throw new Error('Configure o e-mail (SMTP_HOST, SMTP_USER, SMTP_PASS) no servidor para enviar cobranças');
+    await this.transporter.sendMail({ from: this.from, ...opts });
+  }
+
   /** Retorna true se o e-mail foi realmente enviado. Nunca lança exceção. */
   async send(to: string, subject: string, html: string): Promise<boolean> {
     if (!this.transporter) {
