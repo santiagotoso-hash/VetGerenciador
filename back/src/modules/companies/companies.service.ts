@@ -267,7 +267,7 @@ export class CompaniesService {
     if (!u) throw new NotFoundException('Usuário não encontrado nesta empresa');
     return this.db.user.update({
       where: { id: userId },
-      data: { active: dto.active, ...(dto.password && { password: await bcrypt.hash(dto.password, 10) }) },
+      data: { active: dto.active, ...(dto.password && { password: await bcrypt.hash(dto.password, 10), passwordChangedAt: new Date() }) },
       select: publicUser,
     });
   }

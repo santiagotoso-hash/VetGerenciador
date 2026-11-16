@@ -1,5 +1,5 @@
 'use client';
-import { useEffect } from 'react';
+import { forwardRef, useEffect, useState } from 'react';
 
 export const inputCls =
   'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100';
@@ -7,6 +7,40 @@ export const btnPrimary =
   'inline-flex items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50 transition-colors';
 export const btnGhost =
   'inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors';
+
+/** Campo de senha com o "olho" para mostrar/ocultar o que foi digitado (serve com react-hook-form). */
+export const PasswordInput = forwardRef<HTMLInputElement, Omit<React.InputHTMLAttributes<HTMLInputElement>, 'type'>>(
+  function PasswordInput({ className, ...props }, ref) {
+    const [visible, setVisible] = useState(false);
+    return (
+      <div className="relative">
+        <input ref={ref} type={visible ? 'text' : 'password'} className={`${className ?? inputCls} pr-10`} {...props} />
+        <button
+          type="button"
+          onClick={() => setVisible((v) => !v)}
+          className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-gray-400 hover:text-gray-600 focus:outline-none focus-visible:text-primary-600"
+          aria-label={visible ? 'Ocultar senha' : 'Mostrar senha'}
+          title={visible ? 'Ocultar senha' : 'Mostrar senha'}
+          tabIndex={-1}
+        >
+          {visible ? (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden="true">
+              <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 10 8 10 8a13.16 13.16 0 0 1-1.67 2.68" />
+              <path d="M6.61 6.61A13.53 13.53 0 0 0 2 12s3 8 10 8a9.74 9.74 0 0 0 5.39-1.61" />
+              <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" />
+              <path d="m2 2 20 20" />
+            </svg>
+          ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden="true">
+              <path d="M2 12s3-8 10-8 10 8 10 8-3 8-10 8S2 12 2 12Z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+          )}
+        </button>
+      </div>
+    );
+  },
+);
 
 export function PageHeader({
   title,

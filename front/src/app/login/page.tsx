@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -7,7 +8,7 @@ import { z } from 'zod';
 import { api, errorMessage } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import type { AuthResponse } from '@/types';
-import { ErrorBox, Field, btnPrimary, inputCls } from '@/components/ui';
+import { ErrorBox, Field, PasswordInput, btnPrimary, inputCls } from '@/components/ui';
 import { whatsappUrl } from '@/lib/format';
 import { LITOCODE_WHATSAPP } from '@/lib/brand';
 
@@ -67,8 +68,11 @@ export default function LoginPage() {
           <input type="email" autoComplete="username" className={inputCls} {...register('email')} />
         </Field>
         <Field label="Senha" error={errors.password?.message}>
-          <input type="password" autoComplete="current-password" className={inputCls} {...register('password')} />
+          <PasswordInput autoComplete="current-password" {...register('password')} />
         </Field>
+        <div className="-mt-2 text-right">
+          <Link href="/esqueci-senha" className="text-sm text-primary-600 hover:underline">Esqueci minha senha</Link>
+        </div>
         <button type="submit" disabled={isSubmitting} className={`${btnPrimary} w-full`}>
           {isSubmitting ? 'Entrando…' : 'Entrar'}
         </button>
