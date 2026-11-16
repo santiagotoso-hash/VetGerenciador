@@ -25,6 +25,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (!user || !user.active) {
       throw new UnauthorizedException('Usuário inativo ou inexistente');
     }
+    // senha trocada depois da emissão do token: a sessão antiga deixa de valer
+    if (user.passwordChangedAt && payload.iat * 1000 < user.passwordChangedAt.getTime()) {
+      throw new UnauthorizedException('Sessão encerrada: a senha foi alterada');
+    }
     if (user.companyId && user.company && !user.company.active) {
       throw new UnauthorizedException('Empresa desativada');
     }

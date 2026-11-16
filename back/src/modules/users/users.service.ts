@@ -80,6 +80,7 @@ export class UsersService {
     if (data.active === false) await this.assertNotLastAdmin(id);
     if (data.password) {
       data.password = await bcrypt.hash(data.password, 10);
+      data.passwordChangedAt = new Date();
     }
     const { password, refreshToken, ...rest } = await this.prisma.user.update({
       where: { id },

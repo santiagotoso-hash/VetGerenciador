@@ -117,6 +117,10 @@ model User {
   active       Boolean  @default(true)
   refreshToken String?
   lastLoginAt  DateTime?
+  // Redefinição de senha: só o hash do token é guardado. passwordChangedAt encerra sessões antigas.
+  passwordResetHash    String?
+  passwordResetExpires DateTime?
+  passwordChangedAt    DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
