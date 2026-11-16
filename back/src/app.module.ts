@@ -5,6 +5,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { TenantInterceptor } from './common/tenant';
 import { CompaniesModule } from './modules/companies/companies.module';
 import { BillingModule } from './modules/billing/billing.module';
+import { FiscalModule } from './modules/fiscal/fiscal.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { MailModule } from './modules/mail/mail.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -37,6 +38,7 @@ import { ReportsModule } from './modules/reports/reports.module';
     FinancialModule,
     ReportsModule,
     BillingModule,
+    FiscalModule,
     CompaniesModule,
   ],
   providers: [{ provide: APP_INTERCEPTOR, useClass: TenantInterceptor }],

@@ -6,16 +6,19 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, errorMessage } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import type { Company } from '@/types';
-import { btnGhost, btnPrimary, Card, Empty, ErrorBox, Field, inputCls, WhatsAppIcon } from '@/components/ui';
+import { btnGhost, btnPrimary, Card, Empty, ErrorBox, Field, inputCls, PasswordInput, WhatsAppIcon } from '@/components/ui';
 import { BillingPanel } from '@/components/billing/BillingDialog';
 import { UsersPanel } from '@/components/companies/UsersPanel';
+import { OnboardingTab } from '@/components/companies/OnboardingTab';
 import { billingStatus, formatMoney, toneClass } from '@/lib/billing';
 import { currency, statusLabel, whatsappUrl } from '@/lib/format';
 import { resizeImage } from '@/lib/image';
+import { providerLabel } from '@/lib/fiscal';
 import type { AppointmentStatus } from '@/types';
 
-type Tab = 'uso' | 'pagamentos' | 'empresa' | 'proprietario' | 'usuarios';
+type Tab = 'passos' | 'uso' | 'pagamentos' | 'empresa' | 'proprietario' | 'usuarios';
 const tabs: { key: Tab; label: string }[] = [
+  { key: 'passos', label: 'Primeiros passos' },
   { key: 'uso', label: 'Uso do sistema' },
   { key: 'pagamentos', label: 'Pagamentos' },
   { key: 'empresa', label: 'Dados da empresa' },
@@ -43,7 +46,7 @@ export default function EmpresaDetalhePage() {
   const { id } = useParams<{ id: string }>();
   const me = useAuthStore((s) => s.user);
   const qc = useQueryClient();
-  const [tab, setTab] = useState<Tab>('uso');
+  const [tab, setTab] = useState<Tab>('passos');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -125,6 +128,7 @@ export default function EmpresaDetalhePage() {
         ))}
       </div>
 
+      {tab === 'passos' && <OnboardingTab companyId={company.id} onGo={(t) => setTab(t as Tab)} />}
       {tab === 'uso' && <UsageTab companyId={company.id} />}
       {tab === 'pagamentos' && <Card className="p-5"><BillingPanel companyId={company.id} /></Card>}
       {tab === 'empresa' && <CompanyDataTab company={company} />}
@@ -279,6 +283,7 @@ function CompanyDataTab({ company }: { company: Company }) {
 
   return (
     <div className="grid gap-4 lg:grid-cols-[16rem_1fr]">
+      <div className="space-y-4">
       <Card className="h-fit p-5 text-center">
         <h3 className="mb-3 text-sm font-semibold">Logomarca</h3>
         {company.logo ? (
@@ -298,6 +303,8 @@ function CompanyDataTab({ company }: { company: Company }) {
           <p className="mt-1 text-xs text-gray-400">PNG, JPG ou WebP. Aparece no menu da empresa.</p>
         </div>
       </Card>
+      <FiscalAdminCard company={company} />
+      </div>
 
       <Card className="p-5">
         <form
@@ -363,5 +370,166 @@ function OwnerTab({ company }: { company: Company }) {
         </div>
       </form>
     </Card>
+  );
+}
+
+/** Liga a nota fiscal da empresa e escolhe o emissor e o ambiente (só o superadmin). */
+function FiscalAdminCard({ company }: { company: Company }) {
+  const qc = useQueryClient();
+  const [enabled, setEnabled] = useState(!!company.fiscalEnabled);
+  const [provider, setProvider] = useState(company.fiscalProvider ?? 'MANUAL');
+  const [env, setEnv] = useState(company.fiscalEnvironment ?? 'HOMOLOGACAO');
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setEnabled(!!company.fiscalEnabled);
+    setProvider(company.fiscalProvider ?? 'MANUAL');
+    setEnv(company.fiscalEnvironment ?? 'HOMOLOGACAO');
+  }, [company]);
+
+  const save = useMutation({
+    mutationFn: async () => api.patch(`/companies/${company.id}`, { fiscalEnabled: enabled, fiscalProvider: provider, fiscalEnvironment: env }),
+    onSuccess: () => {
+      setError('');
+      setMessage('Salvo.');
+      qc.invalidateQueries({ queryKey: ['companies'] });
+    },
+    onError: (e) => {
+      setMessage('');
+      setError(errorMessage(e));
+    },
+  });
+
+  return (
+    <Card className="h-fit p-5">
+      <h3 className="mb-3 text-sm font-semibold">Nota fiscal</h3>
+      <ErrorBox message={error} />
+      {message && <p className="mb-2 rounded-lg bg-green-50 px-3 py-2 text-xs text-green-700">{message}</p>}
+      <label className="mb-3 flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={enabled} onChange={(e) => { setMessage(''); setEnabled(e.target.checked); }} /> Ativada para esta empresa
+      </label>
+      <Field label="Emissor">
+        <select className={inputCls} value={provider} onChange={(e) => { setMessage(''); setProvider(e.target.value); }}>
+          {Object.entries(providerLabel).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+      </Field>
+      <div className="mt-3">
+        <Field label="Ambiente">
+          <select className={inputCls} value={env} onChange={(e) => { setMessage(''); setEnv(e.target.value); }}>
+            <option value="HOMOLOGACAO">Homologação (testes)</option>
+            <option value="PRODUCAO">Produção (valor fiscal)</option>
+          </select>
+        </Field>
+      </div>
+      <p className="mt-2 text-xs text-gray-500">O emissor de teste só funciona em homologação. Produção só depois de configurar um emissor real.</p>
+      <div className="mt-3 flex justify-end">
+        <button className={btnPrimary} onClick={() => save.mutate()} disabled={save.isPending}>{save.isPending ? 'Salvando…' : 'Salvar'}</button>
+      </div>
+      <FiscalCredentials company={company} />
+    </Card>
+  );
+}
+
+const fileToBase64 = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(',')[1] ?? '');
+    r.onerror = () => reject(new Error('Não foi possível ler o arquivo'));
+    r.readAsDataURL(file);
+  });
+
+/** Certificado digital A1 e CSC da empresa. Ficam cifrados no servidor e nunca voltam para a tela. */
+function FiscalCredentials({ company }: { company: Company }) {
+  const qc = useQueryClient();
+  const s = company.fiscalSecrets;
+  const [file, setFile] = useState<File | null>(null);
+  const [password, setPassword] = useState('');
+  const [csc, setCsc] = useState({ id: '', code: '' });
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+
+  const done = (msg: string) => {
+    setError('');
+    setMessage(msg);
+    qc.invalidateQueries({ queryKey: ['companies'] });
+  };
+  const fail = (e: unknown) => {
+    setMessage('');
+    setError(errorMessage(e));
+  };
+  const upload = useMutation({
+    mutationFn: async () => api.put(`/companies/${company.id}/fiscal/certificate`, { fileName: file!.name, contentBase64: await fileToBase64(file!), password }),
+    onSuccess: () => {
+      setFile(null);
+      setPassword('');
+      done('Certificado guardado.');
+    },
+    onError: fail,
+  });
+  const removeCert = useMutation({ mutationFn: async () => api.delete(`/companies/${company.id}/fiscal/certificate`), onSuccess: () => done('Certificado removido.'), onError: fail });
+  const saveCsc = useMutation({
+    mutationFn: async () => api.put(`/companies/${company.id}/fiscal/csc`, { cscId: csc.id, csc: csc.code }),
+    onSuccess: () => {
+      setCsc({ id: '', code: '' });
+      done('CSC guardado.');
+    },
+    onError: fail,
+  });
+  const removeCsc = useMutation({ mutationFn: async () => api.delete(`/companies/${company.id}/fiscal/csc`), onSuccess: () => done('CSC removido.'), onError: fail });
+
+  const expires = s?.certificateExpiresAt ? new Date(s.certificateExpiresAt) : null;
+  const daysLeft = expires ? Math.ceil((expires.getTime() - Date.now()) / 86_400_000) : null;
+
+  return (
+    <div className="mt-5 space-y-4 border-t border-gray-100 pt-4">
+      <h4 className="text-sm font-semibold">Credenciais do emissor</h4>
+      <ErrorBox message={error} />
+      {message && <p className="rounded-lg bg-green-50 px-3 py-2 text-xs text-green-700">{message}</p>}
+      {s && !s.encryptionReady && (
+        <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          Para guardar certificado ou CSC, configure <code>FISCAL_ENCRYPTION_KEY</code> no servidor (guia em <code>back/src/modules/fiscal/README.md</code>).
+        </p>
+      )}
+
+      <div className="space-y-2">
+        <div className="text-xs font-medium text-gray-600">Certificado digital A1</div>
+        {s?.hasCertificate ? (
+          <div className="rounded-lg bg-gray-50 p-3 text-xs">
+            <div className="break-words font-medium">{s.certificateName}</div>
+            <div className={daysLeft !== null && daysLeft < 30 ? 'text-red-600' : 'text-gray-500'}>
+              Vence em {expires?.toLocaleDateString('pt-BR')} ({daysLeft !== null && daysLeft < 0 ? 'vencido' : `${daysLeft} dias`})
+            </div>
+            <button className="mt-1 text-red-500 hover:underline" onClick={() => confirm('Remover o certificado desta empresa?') && removeCert.mutate()}>Remover</button>
+          </div>
+        ) : (
+          <p className="text-xs text-gray-400">Nenhum certificado guardado.</p>
+        )}
+        <input type="file" accept=".pfx,.p12" className="block w-full text-xs" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+        <PasswordInput placeholder="Senha do certificado" autoComplete="off" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <button className={btnGhost} disabled={!file || !password || upload.isPending || !s?.encryptionReady} onClick={() => upload.mutate()}>
+          {upload.isPending ? 'Enviando…' : s?.hasCertificate ? 'Trocar certificado' : 'Guardar certificado'}
+        </button>
+      </div>
+
+      <div className="space-y-2">
+        <div className="text-xs font-medium text-gray-600">CSC (NFC-e)</div>
+        {s?.hasCsc ? (
+          <p className="text-xs text-gray-500">
+            Guardado (ID {s.cscId}). <button className="text-red-500 hover:underline" onClick={() => confirm('Remover o CSC?') && removeCsc.mutate()}>Remover</button>
+          </p>
+        ) : (
+          <p className="text-xs text-gray-400">Nenhum CSC guardado.</p>
+        )}
+        <div className="grid grid-cols-[4rem_1fr] gap-2">
+          <input className={inputCls} placeholder="ID" value={csc.id} onChange={(e) => setCsc({ ...csc, id: e.target.value })} />
+          <input className={inputCls} placeholder="Código CSC" autoComplete="off" value={csc.code} onChange={(e) => setCsc({ ...csc, code: e.target.value })} />
+        </div>
+        <button className={btnGhost} disabled={!csc.id || csc.code.length < 6 || saveCsc.isPending || !s?.encryptionReady} onClick={() => saveCsc.mutate()}>
+          Guardar CSC
+        </button>
+      </div>
+      <p className="text-xs text-gray-400">Ficam cifrados no servidor e nunca aparecem de novo na tela. Só são usados quando houver um emissor real configurado.</p>
+    </div>
   );
 }

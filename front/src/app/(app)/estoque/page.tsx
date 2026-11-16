@@ -8,6 +8,7 @@ import { api, errorMessage } from '@/lib/api';
 import type { Product } from '@/types';
 import { btnGhost, btnPrimary, Card, Empty, ErrorBox, Field, inputCls, Modal, PageHeader } from '@/components/ui';
 import { currency } from '@/lib/format';
+import { originOptions } from '@/lib/fiscal';
 
 const categories: Record<string, string> = {
   FOOD: 'Ração',
@@ -29,9 +30,13 @@ const schema = z.object({
   costPrice: num,
   stock: num,
   minStock: num,
+  ncm: z.string().regex(/^(\d{8})?$/, 'NCM tem 8 números'),
+  cfop: z.string().regex(/^(\d{4})?$/, 'CFOP tem 4 números'),
+  taxCode: z.string().regex(/^(\d{2,3})?$/, 'CST/CSOSN tem 2 ou 3 números'),
+  origin: z.string(),
 });
 type Form = z.infer<typeof schema>;
-const empty: Form = { name: '', category: 'FOOD', brand: '', sku: '', price: '', costPrice: '', stock: '0', minStock: '5' };
+const empty: Form = { name: '', category: 'FOOD', brand: '', sku: '', price: '', costPrice: '', stock: '0', minStock: '5', ncm: '', cfop: '', taxCode: '', origin: '' };
 
 const n = (v: string) => Number(v.replace(',', '.'));
 
@@ -45,6 +50,11 @@ function toPayload(f: Form) {
     ...(f.brand && { brand: f.brand }),
     ...(f.sku && { sku: f.sku }),
     ...(f.costPrice && { costPrice: n(f.costPrice) }),
+    // fiscal: vazio limpa o campo
+    ncm: f.ncm,
+    cfop: f.cfop,
+    taxCode: f.taxCode,
+    ...(f.origin !== '' && { origin: Number(f.origin) }),
   };
 }
 
@@ -72,6 +82,7 @@ export default function EstoquePage() {
             name: p.name, category: p.category, brand: p.brand ?? '', sku: p.sku ?? '',
             price: String(p.price), costPrice: p.costPrice?.toString() ?? '',
             stock: String(p.stock), minStock: String(p.minStock),
+            ncm: p.ncm ?? '', cfop: p.cfop ?? '', taxCode: p.taxCode ?? '', origin: p.origin?.toString() ?? '',
           },
     );
   };
@@ -184,6 +195,21 @@ export default function EstoquePage() {
             <Field label="Estoque atual" error={err.stock?.message}><input inputMode="numeric" className={inputCls} {...form.register('stock')} /></Field>
             <Field label="Estoque mínimo" error={err.minStock?.message}><input inputMode="numeric" className={inputCls} {...form.register('minStock')} /></Field>
           </div>
+          <details className="rounded-lg border border-gray-200 p-3" open={!!(editing && editing !== 'new' && !editing.ncm)}>
+            <summary className="cursor-pointer text-sm font-medium text-gray-700">Dados fiscais (nota fiscal)</summary>
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <Field label="NCM (8 dígitos)" error={err.ncm?.message}><input inputMode="numeric" className={inputCls} placeholder="23091000" {...form.register('ncm')} /></Field>
+              <Field label="CFOP (4 dígitos)" error={err.cfop?.message}><input inputMode="numeric" className={inputCls} placeholder="5102" {...form.register('cfop')} /></Field>
+              <Field label="CST / CSOSN" error={err.taxCode?.message}><input inputMode="numeric" className={inputCls} placeholder="102" {...form.register('taxCode')} /></Field>
+              <Field label="Origem">
+                <select className={inputCls} {...form.register('origin')}>
+                  <option value="">Selecione…</option>
+                  {originOptions.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </Field>
+            </div>
+            <p className="mt-2 text-xs text-gray-500">Quem informa esses códigos é o seu contador. Só são necessários para emitir nota de produto.</p>
+          </details>
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" className={btnGhost} onClick={() => setEditing(null)}>Cancelar</button>
             <button type="submit" className={btnPrimary} disabled={save.isPending}>{save.isPending ? 'Salvando…' : 'Salvar'}</button>

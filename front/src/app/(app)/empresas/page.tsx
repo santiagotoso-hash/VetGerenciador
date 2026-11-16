@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -9,6 +10,7 @@ import { api, errorMessage } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import type { Company, Role } from '@/types';
 import { btnGhost, btnPrimary, Card, Empty, ErrorBox, Field, inputCls, Modal, PageHeader } from '@/components/ui';
+import { ProgressBar } from '@/components/companies/OnboardingTab';
 import { billingStatus, formatMoney, formatYmd, parseMoney, toneClass } from '@/lib/billing';
 
 const roleLabel: Partial<Record<Role, string>> = {
@@ -45,6 +47,7 @@ const emptyForm: Form = {
 export default function EmpresasPage() {
   const me = useAuthStore((s) => s.user);
   const qc = useQueryClient();
+  const router = useRouter();
   const [creating, setCreating] = useState(false);
   const [apiError, setApiError] = useState('');
 
@@ -71,9 +74,11 @@ export default function EmpresasPage() {
         ...(monthlyFeeCents && { monthlyFeeCents }),
       });
     },
-    onSuccess: () => {
+    onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['companies'] });
       setCreating(false);
+      // a empresa nova já abre no checklist de implantação
+      router.push(`/empresas/${res.data.id}?aba=passos`);
     },
     onError: (e) => setApiError(errorMessage(e)),
   });
@@ -133,6 +138,7 @@ export default function EmpresasPage() {
                 <th className="px-4 py-3">Empresa</th>
                 <th className="hidden px-4 py-3 md:table-cell">Administrador</th>
                 <th className="hidden px-4 py-3 lg:table-cell">Dados</th>
+                <th className="hidden px-4 py-3 xl:table-cell">Implantação</th>
                 <th className="px-4 py-3">Cobrança</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3" />
@@ -157,6 +163,14 @@ export default function EmpresasPage() {
                   </td>
                   <td className="hidden px-4 py-3 text-gray-500 lg:table-cell">
                     {c.activeUsers ?? 0} usuário(s) ativo(s) · {c._count?.clients ?? 0} cliente(s) · {c._count?.pets ?? 0} pet(s)
+                  </td>
+                  <td className="hidden px-4 py-3 xl:table-cell">
+                    {c.onboarding && (
+                      <Link href={`/empresas/${c.id}?aba=passos`} className="block w-28" title="Ver checklist de implantação">
+                        <ProgressBar percent={c.onboarding.percent} />
+                        <span className="text-xs text-gray-500">{c.onboarding.percent}% · {c.onboarding.done}/{c.onboarding.total}</span>
+                      </Link>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`rounded-full px-2 py-0.5 text-xs ${toneClass[billingStatus(c.billing).tone]}`}>{billingStatus(c.billing).label}</span>

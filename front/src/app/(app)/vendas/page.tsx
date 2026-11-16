@@ -6,6 +6,8 @@ import { api, errorMessage } from '@/lib/api';
 import type { Client, PaymentMethod, Product, Sale, Service } from '@/types';
 import { btnGhost, btnPrimary, Card, Empty, ErrorBox, inputCls, PageHeader } from '@/components/ui';
 import { currency, dateTime } from '@/lib/format';
+import { SaleInvoicesModal } from '@/components/fiscal/SaleInvoicesModal';
+import { saleFiscalLines, type FiscalSettings, type SaleFiscalResult } from '@/lib/fiscal';
 
 const paymentLabel: Record<PaymentMethod, string> = {
   CASH: 'Dinheiro',
@@ -36,6 +38,12 @@ export default function VendasPage() {
   const [discount, setDiscount] = useState('');
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [restored, setRestored] = useState(false);
+  const [invoiceFor, setInvoiceFor] = useState<string | null>(null);
+  const { data: fiscal } = useQuery({
+    queryKey: ['fiscal', 'settings'],
+    queryFn: async () => (await api.get<FiscalSettings>('/fiscal/settings')).data,
+    retry: false,
+  });
 
   // O rascunho da venda sobrevive à ida para "Clientes" (cadastro de cliente novo).
   useEffect(() => {
@@ -132,11 +140,12 @@ export default function VendasPage() {
         })
       ).data,
     onSuccess: (sale) => {
-      setMessage({ ok: true, text: `Venda concluída: ${currency(sale.total)}` });
+      const lines = saleFiscalLines(sale.fiscal as SaleFiscalResult | undefined);
+      setMessage({ ok: true, text: [`Venda concluída: ${currency(sale.total)}`, ...lines].join('\n') });
       setCart([]);
       setDiscount('');
       setClientId('');
-      ['products', 'sales', 'dashboard', 'financial'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      ['products', 'sales', 'dashboard', 'financial', 'fiscal'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
     },
     onError: (e) => setMessage({ ok: false, text: errorMessage(e) }),
   });
@@ -231,7 +240,7 @@ export default function VendasPage() {
               <div className="flex justify-between text-lg font-bold"><span>Total</span><span>{currency(total)}</span></div>
             </div>
 
-            {message && (message.ok ? <div className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">{message.text}</div> : <ErrorBox message={message.text} />)}
+            {message && (message.ok ? <div className="whitespace-pre-line rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">{message.text}</div> : <ErrorBox message={message.text} />)}
 
             <div className="flex gap-2">
               <button className={btnGhost} disabled={cart.length === 0} onClick={() => setCart([])}>Limpar</button>
@@ -254,6 +263,7 @@ export default function VendasPage() {
                   <th className="hidden px-4 py-3 md:table-cell">Itens</th>
                   <th className="hidden px-4 py-3 sm:table-cell">Pagamento</th>
                   <th className="px-4 py-3 text-right">Total</th>
+                  {fiscal?.fiscalEnabled && <th className="px-4 py-3" />}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -266,6 +276,11 @@ export default function VendasPage() {
                     </td>
                     <td className="hidden px-4 py-3 text-gray-500 sm:table-cell">{paymentLabel[s.paymentMethod]}</td>
                     <td className="px-4 py-3 text-right font-medium">{currency(s.total)}</td>
+                    {fiscal?.fiscalEnabled && (
+                      <td className="whitespace-nowrap px-4 py-3 text-right">
+                        <button className="text-primary-600 hover:underline" onClick={() => setInvoiceFor(s.id)}>🧾 Nota</button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -273,6 +288,8 @@ export default function VendasPage() {
           )}
         </Card>
       )}
+
+      <SaleInvoicesModal saleId={invoiceFor} onClose={() => setInvoiceFor(null)} />
     </>
   );
 }

@@ -5,8 +5,8 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CompaniesService } from './companies.service';
 import {
-  CompanyUserDto, CreateCompanyDto, CreatePaymentDto, InvoiceSettingsDto, SendInvoiceDto, UpdateCompanyDto,
-  UpdateCompanyUserDto,
+  CompanyUserDto, CreateCompanyDto, CreatePaymentDto, FiscalCertificateDto, FiscalCscDto, InvoiceSettingsDto, SendInvoiceDto,
+  SetOnboardingCheckDto, UpdateCompanyDto, UpdateCompanyUserDto,
 } from './dto';
 
 @ApiTags('Companies')
@@ -28,6 +28,18 @@ export class CompaniesController {
   @Patch(':id/users/:userId') updateUser(@Param('id') id: string, @Param('userId') userId: string, @Body() dto: UpdateCompanyUserDto) {
     return this.service.updateUser(id, userId, dto);
   }
+
+  // Checklist de implantação
+  @Get(':id/onboarding') onboarding(@Param('id') id: string) { return this.service.onboarding(id); }
+  @Put(':id/onboarding/:key') setOnboarding(@Param('id') id: string, @Param('key') key: string, @Body() dto: SetOnboardingCheckDto) {
+    return this.service.setOnboardingCheck(id, key, dto.done);
+  }
+
+  // Credenciais fiscais (cifradas no banco; só o resumo volta pela API)
+  @Put(':id/fiscal/certificate') setCertificate(@Param('id') id: string, @Body() dto: FiscalCertificateDto) { return this.service.setCertificate(id, dto); }
+  @Delete(':id/fiscal/certificate') removeCertificate(@Param('id') id: string) { return this.service.removeCertificate(id); }
+  @Put(':id/fiscal/csc') setCsc(@Param('id') id: string, @Body() dto: FiscalCscDto) { return this.service.setCsc(id, dto); }
+  @Delete(':id/fiscal/csc') removeCsc(@Param('id') id: string) { return this.service.removeCsc(id); }
 
   // Financeiro
   @Put(':id/invoice') setInvoice(@Param('id') id: string, @Body() dto: InvoiceSettingsDto) { return this.service.setInvoice(id, dto); }

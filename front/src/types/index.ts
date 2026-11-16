@@ -33,6 +33,18 @@ export interface Company {
   ownerEmail?: string | null;
   ownerPhone?: string | null;
   ownerDocument?: string | null;
+  fiscalEnabled?: boolean;
+  fiscalSecrets?: {
+    encryptionReady: boolean;
+    hasCertificate: boolean;
+    certificateName: string | null;
+    certificateExpiresAt: string | null;
+    hasCsc: boolean;
+    cscId: string | null;
+  };
+  fiscalProvider?: string;
+  fiscalEnvironment?: string;
+  onboarding?: { done: number; total: number; percent: number };
   billing: Billing;
   invoice: { email: string | null; day: number | null; lastSentMonth: string | null; next: string | null; ready: boolean };
   lastPayment: { paidAt: string; amountCents: number } | null;
@@ -159,6 +171,10 @@ export interface Product {
   stock: number;
   minStock: number;
   unit: string;
+  ncm?: string | null;
+  cfop?: string | null;
+  taxCode?: string | null;
+  origin?: number | null;
   active: boolean;
 }
 
@@ -169,6 +185,10 @@ export interface Service {
   category: string;
   price: number;
   duration: number;
+  serviceCode?: string | null;
+  nbs?: string | null;
+  issRate?: number | null;
+  cnae?: string | null;
   active: boolean;
 }
 
@@ -194,6 +214,8 @@ export interface Sale {
   client?: Client | null;
   user?: Pick<User, 'id' | 'name'>;
   items: SaleItem[];
+  /** Só vem ao criar a venda, se a empresa ligou "Emitir nota ao finalizar a venda". */
+  fiscal?: { results: { type: 'NFSE' | 'NFE' | 'NFCE'; status: string; message?: string }[] } | null;
 }
 
 export type FinancialType = 'INCOME' | 'EXPENSE';

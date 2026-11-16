@@ -9,6 +9,7 @@ import { useAuthStore } from '@/store/auth.store';
 import type { Role, Service, User } from '@/types';
 import { btnGhost, btnPrimary, Card, Empty, ErrorBox, Field, inputCls, Modal, PageHeader } from '@/components/ui';
 import { currency } from '@/lib/format';
+import { FiscalSettingsTab } from '@/components/fiscal/FiscalSettingsTab';
 
 const roleLabel: Record<Role, string> = {
   SUPER_ADMIN: 'Superadmin',
@@ -28,7 +29,7 @@ const roles = (Object.keys(roleLabel) as Role[]).filter((r) => r !== 'SUPER_ADMI
 
 export default function ConfiguracoesPage() {
   const me = useAuthStore((s) => s.user);
-  const [tab, setTab] = useState<'usuarios' | 'servicos'>('usuarios');
+  const [tab, setTab] = useState<'usuarios' | 'servicos' | 'fiscal'>('usuarios');
 
   if (me && me.role !== 'ADMIN') {
     return (
@@ -47,7 +48,7 @@ export default function ConfiguracoesPage() {
     <>
       <PageHeader title="Configurações" subtitle="Equipe e catálogo de serviços" />
       <div className="mb-4 flex gap-1 border-b border-gray-200">
-        {([['usuarios', 'Usuários'], ['servicos', 'Serviços']] as const).map(([k, label]) => (
+        {([['usuarios', 'Usuários'], ['servicos', 'Serviços'], ['fiscal', 'Fiscal']] as const).map(([k, label]) => (
           <button
             key={k}
             onClick={() => setTab(k)}
@@ -59,7 +60,7 @@ export default function ConfiguracoesPage() {
           </button>
         ))}
       </div>
-      {tab === 'usuarios' ? <UsersTab meId={me?.id} /> : <ServicesTab />}
+      {tab === 'usuarios' ? <UsersTab meId={me?.id} /> : tab === 'servicos' ? <ServicesTab /> : <FiscalSettingsTab />}
     </>
   );
 }
@@ -237,6 +238,10 @@ const serviceSchema = z.object({
   price: num('Valor inválido'),
   duration: num('Duração inválida'),
   description: z.string(),
+  serviceCode: z.string().regex(/^(\d{1,2}\.?\d{2}(\.?\d{2})?)?$/, 'Código inválido (ex.: 05.01)'),
+  issRate: z.string().refine((v) => v === '' || (!isNaN(Number(v.replace(',', '.'))) && Number(v.replace(',', '.')) >= 0 && Number(v.replace(',', '.')) <= 100), 'Alíquota inválida'),
+  nbs: z.string(),
+  cnae: z.string(),
 });
 type ServiceForm = z.infer<typeof serviceSchema>;
 const n = (v: string) => Number(v.replace(',', '.'));
@@ -259,8 +264,11 @@ function ServicesTab() {
     setEditing(s);
     form.reset(
       s === 'new'
-        ? { name: '', category: '', price: '', duration: '30', description: '' }
-        : { name: s.name, category: s.category, price: String(s.price), duration: String(s.duration), description: s.description ?? '' },
+        ? { name: '', category: '', price: '', duration: '30', description: '', serviceCode: '', issRate: '', nbs: '', cnae: '' }
+        : {
+            name: s.name, category: s.category, price: String(s.price), duration: String(s.duration), description: s.description ?? '',
+            serviceCode: s.serviceCode ?? '', issRate: s.issRate?.toString() ?? '', nbs: s.nbs ?? '', cnae: s.cnae ?? '',
+          },
     );
   };
 
@@ -274,6 +282,11 @@ function ServicesTab() {
         price: n(f.price),
         duration: Math.round(n(f.duration)),
         ...(f.description && { description: f.description }),
+        // fiscal: vazio limpa o campo
+        serviceCode: f.serviceCode,
+        nbs: f.nbs,
+        cnae: f.cnae,
+        ...(f.issRate !== '' && { issRate: n(f.issRate) }),
       };
       return editing === 'new' || !editing ? api.post('/services', body) : api.patch(`/services/${editing.id}`, { ...body, description: f.description });
     },
@@ -341,6 +354,16 @@ function ServicesTab() {
             <Field label="Duração (min) *" error={err.duration?.message}><input inputMode="numeric" className={inputCls} {...form.register('duration')} /></Field>
           </div>
           <Field label="Descrição"><textarea rows={2} className={inputCls} {...form.register('description')} /></Field>
+          <details className="rounded-lg border border-gray-200 p-3" open={!!(editing && editing !== 'new' && !editing.serviceCode)}>
+            <summary className="cursor-pointer text-sm font-medium text-gray-700">Dados fiscais (nota de serviço)</summary>
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <Field label="Código do serviço (LC 116)" error={err.serviceCode?.message}><input className={inputCls} placeholder="05.01" {...form.register('serviceCode')} /></Field>
+              <Field label="Alíquota de ISS (%)" error={err.issRate?.message}><input inputMode="decimal" className={inputCls} placeholder="2,5" {...form.register('issRate')} /></Field>
+              <Field label="NBS (se exigido)"><input className={inputCls} {...form.register('nbs')} /></Field>
+              <Field label="CNAE"><input className={inputCls} placeholder="7500-1/00" {...form.register('cnae')} /></Field>
+            </div>
+            <p className="mt-2 text-xs text-gray-500">Quem informa esses dados é o seu contador. Só são necessários para emitir nota de serviço.</p>
+          </details>
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" className={btnGhost} onClick={() => setEditing(null)}>Cancelar</button>
             <button type="submit" className={btnPrimary} disabled={save.isPending}>{save.isPending ? 'Salvando…' : 'Salvar'}</button>

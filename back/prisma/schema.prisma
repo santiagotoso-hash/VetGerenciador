@@ -55,6 +55,27 @@ enum PaymentMethod {
   CHECK
 }
 
+enum TaxRegime {
+  MEI
+  SIMPLES
+  PRESUMIDO
+  REAL
+}
+
+enum InvoiceType {
+  NFSE
+  NFE
+  NFCE
+}
+
+enum InvoiceStatus {
+  DRAFT
+  PROCESSING
+  AUTHORIZED
+  REJECTED
+  CANCELED
+}
+
 enum FinancialType {
   INCOME
   EXPENSE
@@ -82,6 +103,27 @@ model Company {
   ownerEmail    String?
   ownerPhone    String?
   ownerDocument String?
+
+  // Fiscal (nota fiscal). O superadmin liga o recurso e escolhe o emissor; a empresa preenche os dados.
+  stateRegistration        String?
+  municipalRegistration    String?
+  taxRegime                TaxRegime?
+  cityIbgeCode             String?
+  fiscalEnabled            Boolean   @default(false)
+  fiscalProvider           String    @default("MANUAL")
+  fiscalEnvironment        String    @default("HOMOLOGACAO")
+  // Emitir a nota automaticamente ao finalizar a venda (escolha da empresa)
+  fiscalAutoEmit           Boolean   @default(false)
+  // Credenciais fiscais da empresa, CIFRADAS (AES-256-GCM, chave em FISCAL_ENCRYPTION_KEY). Nunca saem pela API.
+  fiscalCertificate           String?
+  fiscalCertificatePassword   String?
+  fiscalCertificateName       String?
+  fiscalCertificateExpiresAt  DateTime?
+  fiscalCscId                 String?
+  fiscalCscToken              String?
+  // Itens do checklist de implantação confirmados à mão (chave -> true/false)
+  onboardingChecks            Json      @default("{}")
+  invoices                 Invoice[]
 
   // Cobrança (controlada pelo superadmin). Sem teste, sem pagamento e sem início = "sem cobrança" (nunca bloqueia).
   trialEndsAt          DateTime?
@@ -197,6 +239,11 @@ model Service {
   category    String
   price       Float
   duration    Int
+  // Fiscal (NFS-e)
+  serviceCode String?
+  nbs         String?
+  issRate     Float?
+  cnae        String?
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -282,6 +329,11 @@ model Product {
   stock       Int      @default(0)
   minStock    Int      @default(5)
   unit        String   @default("un")
+  // Fiscal
+  ncm         String?
+  cfop        String?
+  taxCode     String?
+  origin      Int?
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -311,7 +363,8 @@ model Sale {
   userId   String
   user     User    @relation(fields: [userId], references: [id])
 
-  items SaleItem[]
+  items    SaleItem[]
+  invoices Invoice[]
 
   companyId String
   company   Company @relation(fields: [companyId], references: [id])
@@ -371,4 +424,40 @@ model Payment {
 
   @@index([companyId, periodEnd])
   @@map("payments")
+}
+
+/// Nota fiscal (NFS-e, NF-e ou NFC-e) gerada a partir de uma venda. Os itens ficam congelados em "items".
+model Invoice {
+  id                String        @id @default(cuid())
+  type              InvoiceType
+  status            InvoiceStatus @default(DRAFT)
+  environment       String        @default("HOMOLOGACAO")
+  provider          String        @default("MANUAL")
+  number            String?
+  series            String?
+  accessKey         String?
+  protocol          String?
+  issuedAt          DateTime?
+  amount            Float
+  discount          Float         @default(0)
+  recipientName     String?
+  recipientDocument String?
+  items             Json
+  pdfUrl            String?
+  xmlUrl            String?
+  externalId        String?
+  errorMessage      String?
+  cancelReason      String?
+  canceledAt        DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  saleId    String
+  sale      Sale    @relation(fields: [saleId], references: [id])
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  @@index([companyId, status])
+  @@index([saleId])
+  @@map("invoices")
 }
