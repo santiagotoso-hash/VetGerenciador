@@ -3,12 +3,16 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../prisma/prisma.service';
+import { encryptSecret, secretBoxReady } from '../../common/secret-box';
+import { readCertificate } from '../fiscal/certificate';
+import { MANUAL_ITEMS, OnboardingStats, buildOnboarding } from './onboarding';
 import { computeBilling, ymdInTz } from '../billing/billing';
 import {
   BillingChargeService, chargeDue, chargeMonthKey, nextCharge, receiverReady,
 } from '../billing/billing-charge.service';
 import {
-  CompanyUserDto, CreateCompanyDto, CreatePaymentDto, InvoiceSettingsDto, UpdateCompanyDto, UpdateCompanyUserDto,
+  CompanyUserDto, CreateCompanyDto, CreatePaymentDto, FiscalCertificateDto, FiscalCscDto, InvoiceSettingsDto, UpdateCompanyDto,
+  UpdateCompanyUserDto,
 } from './dto';
 
 const DAY_MS = 86_400_000;
@@ -16,6 +20,7 @@ const DAY_MS = 86_400_000;
 const TEXT_FIELDS = [
   'cnpj', 'phone', 'email', 'address', 'city', 'state', 'zipCode', 'notes',
   'ownerName', 'ownerEmail', 'ownerPhone', 'ownerDocument',
+  'stateRegistration', 'municipalRegistration', 'cityIbgeCode',
 ] as const;
 
 const slugify = (s: string) =>
@@ -55,9 +60,20 @@ export class CompaniesService {
 
   /** Empresa + situação de cobrança + dados do envio por e-mail. */
   private view(c: any) {
-    const { payments, ...company } = c;
+    // segredos fiscais (certificado, senha, CSC) NUNCA saem pela API: só um resumo do que está guardado
+    const {
+      payments, fiscalCertificate, fiscalCertificatePassword, fiscalCscToken, ...company
+    } = c;
     return {
       ...company,
+      fiscalSecrets: {
+        encryptionReady: secretBoxReady(),
+        hasCertificate: !!fiscalCertificate,
+        certificateName: c.fiscalCertificateName ?? null,
+        certificateExpiresAt: c.fiscalCertificateExpiresAt ?? null,
+        hasCsc: !!fiscalCscToken,
+        cscId: c.fiscalCscId ?? null,
+      },
       billing: computeBilling(c),
       invoice: {
         email: c.billingEmail ?? null,
@@ -125,7 +141,12 @@ export class CompaniesService {
     });
     const active = await this.db.user.groupBy({ by: ['companyId'], where: { active: true, companyId: { not: null } }, _count: true });
     const activeOf = new Map(active.map((u) => [u.companyId, u._count]));
-    return list.map((c) => ({ ...this.view(c), activeUsers: activeOf.get(c.id) ?? 0 }));
+    const stats = await this.onboardingStats(list.map((c) => c.id));
+    return list.map((c) => ({
+      ...this.view(c),
+      activeUsers: activeOf.get(c.id) ?? 0,
+      onboarding: buildOnboarding(c, stats.get(c.id)!).progress,
+    }));
   }
 
   async findOne(id: string) {
@@ -153,6 +174,10 @@ export class CompaniesService {
       ...(dto.name && { name: dto.name.trim() }),
       active: dto.active,
       monthlyFeeCents: dto.monthlyFeeCents,
+      fiscalEnabled: dto.fiscalEnabled,
+      fiscalProvider: dto.fiscalProvider,
+      fiscalEnvironment: dto.fiscalEnvironment,
+      taxRegime: dto.taxRegime as any,
     };
     // campos de texto opcionais: vazio limpa (null), ausente não mexe
     for (const k of TEXT_FIELDS) {
@@ -175,6 +200,99 @@ export class CompaniesService {
     if (dto.startBilling) Object.assign(data, { trialEndsAt: null, billingStartDate: today() });
     if (dto.exempt) Object.assign(data, { trialEndsAt: null, paidUntil: null, billingStartDate: null });
     await this.db.company.update({ where: { id }, data });
+    return this.findOne(id);
+  }
+
+  // ---------- checklist de implantação ----------
+
+  /** Números que alimentam o checklist, para várias empresas de uma vez (poucas consultas, qualquer quantidade de empresas). */
+  private async onboardingStats(ids: string[]) {
+    const db = this.db;
+    const by = (rows: { companyId: string | null; _count: { _all: number } }[]) => new Map(rows.map((r) => [r.companyId, r._count._all]));
+    const [clients, appts, sales, payments, roles, adminLogins, prodTotal, prodMissing, svcTotal, svcMissing] = await Promise.all([
+      db.client.groupBy({ by: ['companyId'], where: { companyId: { in: ids } }, _count: { _all: true } }),
+      db.appointment.groupBy({ by: ['companyId'], where: { companyId: { in: ids } }, _count: { _all: true } }),
+      db.sale.groupBy({ by: ['companyId'], where: { companyId: { in: ids } }, _count: { _all: true } }),
+      db.payment.groupBy({ by: ['companyId'], where: { companyId: { in: ids } }, _count: { _all: true } }),
+      db.user.groupBy({ by: ['companyId', 'role'], where: { companyId: { in: ids }, active: true }, _count: { _all: true } }),
+      db.user.findMany({ where: { companyId: { in: ids }, role: 'ADMIN', lastLoginAt: { not: null } }, select: { companyId: true } }),
+      db.product.groupBy({ by: ['companyId'], where: { companyId: { in: ids }, active: true }, _count: { _all: true } }),
+      db.product.groupBy({ by: ['companyId'], where: { companyId: { in: ids }, active: true, OR: [{ ncm: null }, { cfop: null }, { taxCode: null }, { origin: null }] }, _count: { _all: true } }),
+      db.service.groupBy({ by: ['companyId'], where: { companyId: { in: ids }, active: true }, _count: { _all: true } }),
+      db.service.groupBy({ by: ['companyId'], where: { companyId: { in: ids }, active: true, OR: [{ serviceCode: null }, { issRate: null }] }, _count: { _all: true } }),
+    ]);
+    const cl = by(clients), ap = by(appts), sa = by(sales), pa = by(payments), pt = by(prodTotal), pm = by(prodMissing), st = by(svcTotal), sm = by(svcMissing);
+    const roleCount = (id: string, role: string) => roles.find((r) => r.companyId === id && r.role === role)?._count._all ?? 0;
+    const loggedIn = new Set(adminLogins.map((a) => a.companyId));
+    return new Map<string, OnboardingStats>(
+      ids.map((id) => [id, {
+        clients: cl.get(id) ?? 0, appointments: ap.get(id) ?? 0, sales: sa.get(id) ?? 0, payments: pa.get(id) ?? 0,
+        admins: roleCount(id, 'ADMIN'), receptionists: roleCount(id, 'RECEPTIONIST'), adminLoggedIn: loggedIn.has(id),
+        productsTotal: pt.get(id) ?? 0, productsMissingFiscal: pm.get(id) ?? 0,
+        servicesTotal: st.get(id) ?? 0, servicesMissingFiscal: sm.get(id) ?? 0,
+      }]),
+    );
+  }
+
+  async onboarding(id: string) {
+    const c = await this.getRaw(id);
+    const stats = await this.onboardingStats([id]);
+    return buildOnboarding(c, stats.get(id)!);
+  }
+
+  /** Marca ou desmarca um item que depende de algo fora do sistema (contrato, treinamento, contador…). */
+  async setOnboardingCheck(id: string, key: string, done: boolean) {
+    const c = await this.getRaw(id);
+    if (!MANUAL_ITEMS[key]) throw new BadRequestException('Item inválido');
+    const checks = { ...((c.onboardingChecks as Record<string, boolean>) ?? {}), [key]: done };
+    await this.db.company.update({ where: { id }, data: { onboardingChecks: checks } });
+    return this.onboarding(id);
+  }
+
+  // ---------- credenciais fiscais (certificado A1 e CSC) ----------
+
+  /** Guarda o certificado A1 da empresa (cifrado). Valida a senha e lê titular e validade na hora. */
+  async setCertificate(id: string, dto: FiscalCertificateDto) {
+    await this.getRaw(id);
+    let pfx: Buffer;
+    try {
+      pfx = Buffer.from(dto.contentBase64.replace(/^data:[^,]*,/, ''), 'base64');
+    } catch {
+      throw new BadRequestException('Arquivo inválido');
+    }
+    if (pfx.length < 200) throw new BadRequestException('Arquivo de certificado inválido');
+    const info = readCertificate(pfx, dto.password);
+    if (info.expiresAt.getTime() < Date.now()) throw new BadRequestException('Este certificado está vencido');
+    await this.db.company.update({
+      where: { id },
+      data: {
+        fiscalCertificate: encryptSecret(pfx),
+        fiscalCertificatePassword: encryptSecret(dto.password),
+        fiscalCertificateName: info.subject.slice(0, 200),
+        fiscalCertificateExpiresAt: info.expiresAt,
+      },
+    });
+    return this.findOne(id);
+  }
+
+  async removeCertificate(id: string) {
+    await this.getRaw(id);
+    await this.db.company.update({
+      where: { id },
+      data: { fiscalCertificate: null, fiscalCertificatePassword: null, fiscalCertificateName: null, fiscalCertificateExpiresAt: null },
+    });
+    return this.findOne(id);
+  }
+
+  async setCsc(id: string, dto: FiscalCscDto) {
+    await this.getRaw(id);
+    await this.db.company.update({ where: { id }, data: { fiscalCscId: dto.cscId.trim(), fiscalCscToken: encryptSecret(dto.csc.trim()) } });
+    return this.findOne(id);
+  }
+
+  async removeCsc(id: string) {
+    await this.getRaw(id);
+    await this.db.company.update({ where: { id }, data: { fiscalCscId: null, fiscalCscToken: null } });
     return this.findOne(id);
   }
 

@@ -2,13 +2,16 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { currentCompanyId } from '../../common/tenant';
 import { CreateServiceDto, UpdateServiceDto } from './dto';
+import { cleanFiscal } from '../../common/clean-fiscal';
+
+const FISCAL = ['serviceCode', 'nbs', 'cnae'];
 
 @Injectable()
 export class ServicesService {
   constructor(private prisma: PrismaService) {}
 
   create(dto: CreateServiceDto) {
-    return this.prisma.service.create({ data: { ...dto, companyId: currentCompanyId() } });
+    return this.prisma.service.create({ data: { ...cleanFiscal(dto, FISCAL), companyId: currentCompanyId() } });
   }
 
   findAll(search?: string, active?: string) {
@@ -26,7 +29,7 @@ export class ServicesService {
 
   async update(id: string, dto: UpdateServiceDto) {
     await this.findOne(id);
-    return this.prisma.service.update({ where: { id }, data: dto });
+    return this.prisma.service.update({ where: { id }, data: cleanFiscal(dto, FISCAL) });
   }
 
   async remove(id: string) {

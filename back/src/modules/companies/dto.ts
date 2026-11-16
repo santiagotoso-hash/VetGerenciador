@@ -52,12 +52,38 @@ export class UpdateCompanyDto {
   @IsString() @MaxLength(30) @IsOptional() ownerPhone?: string;
   @IsString() @MaxLength(30) @IsOptional() ownerDocument?: string;
 
+  // Fiscal (nota fiscal): quem liga é o superadmin
+  @IsBoolean() @IsOptional() fiscalEnabled?: boolean;
+  @IsIn(['MANUAL', 'MOCK']) @IsOptional() fiscalProvider?: string;
+  @IsIn(['HOMOLOGACAO', 'PRODUCAO']) @IsOptional() fiscalEnvironment?: string;
+  @IsString() @MaxLength(30) @IsOptional() stateRegistration?: string;
+  @IsString() @MaxLength(30) @IsOptional() municipalRegistration?: string;
+  @IsString() @MaxLength(7) @IsOptional() cityIbgeCode?: string;
+  @IsIn(['MEI', 'SIMPLES', 'PRESUMIDO', 'REAL']) @IsOptional() taxRegime?: string;
+
   /** Teste grátis termina daqui a N dias. */
   @IsInt() @Min(1) @Max(365) @IsOptional() trialDays?: number;
   /** Começar a cobrar hoje, sem teste. */
   @IsIn([true]) @IsOptional() startBilling?: true;
   /** Isentar de cobrança (nunca bloqueia por pagamento). */
   @IsIn([true]) @IsOptional() exempt?: true;
+}
+
+export class FiscalCertificateDto {
+  @IsString() @MaxLength(200) fileName: string;
+  /** Conteúdo do arquivo .pfx/.p12 em base64. Um A1 tem poucos KB. */
+  @IsString() @MaxLength(400_000) contentBase64: string;
+  @IsString() @MinLength(1) @MaxLength(200) password: string;
+}
+
+export class FiscalCscDto {
+  /** Identificador do CSC (ex.: 1) e o código em si, ambos gerados no portal da SEFAZ do estado. */
+  @IsString() @MaxLength(10) cscId: string;
+  @IsString() @MinLength(6) @MaxLength(100) csc: string;
+}
+
+export class SetOnboardingCheckDto {
+  @IsBoolean() done: boolean;
 }
 
 export class UpdateCompanyUserDto {

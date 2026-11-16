@@ -13,6 +13,7 @@ const TENANT_MODELS = new Set([
   'Product',
   'Sale',
   'FinancialEntry',
+  'Invoice',
 ]);
 
 const WHERE_OPS = new Set([

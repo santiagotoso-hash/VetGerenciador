@@ -3,6 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { currentCompanyId } from '../../common/tenant';
 import { CreateSaleDto } from './dto';
 import { assertExists } from '../../common/tenant-refs';
+import { FiscalService } from '../fiscal/fiscal.service';
 
 const include = {
   client: true,
@@ -12,13 +13,16 @@ const include = {
 
 @Injectable()
 export class SalesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private fiscal: FiscalService,
+  ) {}
 
   /** Cria a venda, baixa o estoque e lança a receita no financeiro, tudo numa transação. */
   async create(dto: CreateSaleDto, userId: string) {
     if (dto.clientId) await assertExists(this.prisma.client.findUnique({ where: { id: dto.clientId } }), 'Cliente');
     const companyId = currentCompanyId();
-    return this.prisma.$transaction(async (tx) => {
+    const sale = await this.prisma.$transaction(async (tx) => {
       let subtotal = 0;
       const items: any[] = [];
 
@@ -83,6 +87,10 @@ export class SalesService {
 
       return sale;
     });
+
+    // nota fiscal automática (se a empresa ligou): depois da venda concluída, e sem nunca derrubá-la
+    const fiscal = await this.fiscal.autoEmitForSale(sale.id).catch(() => null);
+    return fiscal ? { ...sale, fiscal } : sale;
   }
 
   findAll(from?: string, to?: string, clientId?: string) {
